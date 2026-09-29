@@ -442,3 +442,79 @@ a.corpus-entry { text-decoration: none; }
 	.comparison-common, .comparison-fees-grid { grid-template-columns: 1fr; }
 	.comparison-chart { height: 230px; }
 }
+
+/* Household planner */
+.planner-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.planner-select { width: 100%; min-width: 0; padding: 8px 9px; border: 1px solid #d6dbd0; border-radius: 6px; background: #fff; color: var(--ink); font-size: 12px; }
+.planner-card-title { flex: 1; min-width: 0; overflow: hidden; color: var(--ink); font-size: 12px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.planner-compare-row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto; gap: 8px; align-items: end; }
+.planner-warnings { display: grid; gap: 6px; margin: 0; padding: 12px 14px 12px 30px; border: 1px solid #edc9be; border-left: 3px solid var(--clay); border-radius: 7px; background: #fff9f6; color: #854937; font-size: 12px; line-height: 1.5; }
+.planner-cashflow { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 24px; padding: 14px 16px; border: 1px solid #bedbd7; border-radius: 8px; background: #f0f8f6; }
+.planner-cashflow h2 { margin: 0 0 6px; color: #617875; font-size: 11px; font-weight: 700; }
+.planner-cashflow ul { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.planner-cashflow li { display: flex; justify-content: space-between; gap: 12px; color: #2f615b; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.planner-cashflow li span { color: #4b5649; }
+.planner-cashflow > p { grid-column: 1 / -1; display: flex; justify-content: space-between; margin: 0; padding-top: 10px; border-top: 1px solid #cfe3df; color: #617875; font-size: 12px; font-weight: 650; }
+.planner-cashflow > p strong { color: #8a6411; font-size: 15px; font-variant-numeric: tabular-nums; }
+.planner-cashflow.is-shortfall { border-color: #e7b7a9; background: #fff3ee; }
+.planner-cashflow.is-shortfall > p strong { color: #a54331; }
+.milestone-table .is-debt { color: #a54331; }
+@media (max-width: 600px) {
+	.planner-cashflow { grid-template-columns: 1fr; }
+}
+
+/* Tables inside chat answers */
+.markdown-body .table-scroll { margin: 0 0 12px; overflow-x: auto; }
+.markdown-body table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+.markdown-body th, .markdown-body td { padding: 7px 8px; border-top: 1px solid var(--line); text-align: left; vertical-align: top; }
+.markdown-body thead th { border-top: 0; color: #626c60; font-weight: 650; white-space: nowrap; }
+.markdown-body td { white-space: normal; }
+
+/* Free question limit */
+.usage-meter { display: inline-flex; align-items: center; gap: 6px; }
+.usage-meter a { color: var(--sage-dark); font-weight: 650; }
+.upgrade-panel { display: grid; gap: 14px; margin: 10px 0; padding: 20px; border: 1px solid var(--sage); border-radius: 10px; background: #fff; }
+.upgrade-panel h2 { margin: 0; color: var(--ink); font-family: Georgia, "Palatino Linotype", serif; font-size: 22px; font-weight: 400; }
+.upgrade-panel > p { margin: 0; color: #4b5649; font-size: 13px; line-height: 1.6; }
+.upgrade-plans { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.upgrade-plan { display: grid; gap: 8px; align-content: start; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #fafbf7; }
+.upgrade-plan h3 { margin: 0; color: var(--ink); font-size: 13px; font-weight: 650; }
+.upgrade-plan p { margin: 0; color: #4b5649; font-size: 12px; }
+.upgrade-plan p strong { color: var(--ink); font-family: Georgia, "Palatino Linotype", serif; font-size: 20px; font-weight: 400; }
+.upgrade-panel small { color: #737a70; font-size: 11px; }
+.upgrade-panel small a { color: var(--sage-dark); }
+@media (max-width: 700px) {
+	.upgrade-plans { grid-template-columns: 1fr; }
+}
+
+/* Household planner: wider form so numbers aren't cut off */
+.calc-layout.is-household { grid-template-columns: minmax(340px, 380px) minmax(0, 1fr); gap: 32px; }
+.is-household .calc-input input { padding: 8px 6px 8px 10px; font-size: 14px; }
+.is-household .calc-input span { padding: 0 8px 0 0; font-size: 10.5px; }
+.is-household .planner-pair { gap: 8px; }
+@media (max-width: 900px) {
+	.calc-layout.is-household { grid-template-columns: 1fr; }
+}
+@media (max-width: 380px) {
+	.is-household .planner-pair { grid-template-columns: 1fr; }
+}
+.error-message small { color: #8a5a4a; font-size: 11px; }
+
+/* Portfolio analysis */
+.portfolio-analysis { display: grid; gap: 14px; padding-top: 6px; }
+.portfolio-analysis > h2 { margin: 0; color: var(--ink); font-family: Georgia, "Palatino Linotype", serif; font-size: 24px; font-weight: 400; }
+.analysis-groups { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: start; }
+.analysis-group { padding: 13px 14px; border: 1px solid var(--line); border-top: 3px solid var(--tone); border-radius: 8px; background: rgba(255, 255, 255, 0.75); }
+.analysis-group.is-strength { --tone: #53634f; }
+.analysis-group.is-weakness { --tone: #c77957; }
+.analysis-group.is-risk { --tone: #b58a1e; }
+.analysis-group h3, .analysis-levers h3 { margin: 0 0 8px; color: var(--ink); font-size: 13px; font-weight: 650; }
+.analysis-group ul { display: grid; gap: 8px; margin: 0; padding-left: 16px; color: #4b5649; font-size: 12px; line-height: 1.55; }
+.analysis-group strong { color: var(--ink); font-weight: 650; }
+.analysis-levers { display: grid; gap: 6px; }
+.analysis-levers .milestone-table { margin-top: 4px; }
+.analysis-levers .milestone-table tbody th { white-space: normal; min-width: 220px; }
+.lever-detail { display: block; margin-top: 3px; color: #737a70; font-size: 10.5px; font-weight: 400; line-height: 1.45; }
+@media (max-width: 1100px) {
+	.analysis-groups { grid-template-columns: 1fr; }
+}

@@ -1,11 +1,17 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useChat } from '@ai-sdk/react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import AccountControls from '../components/AccountControls';
 import { MilestoneTable, ProjectionChart } from '../components/ProjectionChart';
+import { HouseholdAnalysisView, HouseholdChart, HouseholdComparison, HouseholdMilestones, HouseholdWarnings } from '../components/HouseholdCharts';
+import { analyseHousehold } from '../lib/finance/householdAnalysis';
+import UpgradePanel, { type LimitTier } from '../components/UpgradePanel';
+import { projectHousehold, type HouseholdInput } from '../lib/finance/household';
+import { projectorLink } from '../lib/finance/householdLink';
 import { collectionLabel } from '../lib/collections';
 import { projectWealth, type ProjectionInput } from '../lib/finance/projections';
 import { DISCLAIMER } from '../lib/guardrails/advice';
@@ -54,10 +60,59 @@ function ProjectionFromArgs({ args }: { args: unknown }) {
   );
 }
 
+/** Whole-household projection, redrawn in the browser from the tool's inputs. */
+function HouseholdFromArgs({ args }: { args: unknown }) {
+  const { result, analysis } = useMemo(() => {
+    try {
+      const r = projectHousehold(args as HouseholdInput);
+      return { result: r, analysis: analyseHousehold(r) };
+    } catch {
+      return { result: null, analysis: null };
+    }
+  }, [args]);
+  if (!result || !analysis) return null;
+  return (
+    <details className="source-disclosure projection-disclosure" open>
+      <summary>Household projection</summary>
+      <HouseholdWarnings result={result} />
+      <HouseholdChart result={result} />
+      <HouseholdMilestones result={result} />
+      <HouseholdComparison result={result} />
+      <HouseholdAnalysisView analysis={analysis} />
+      <p className="projection-note">
+        <a href={projectorLink(args as HouseholdInput)}>Open these numbers in the wealth projector</a> to change them privately on your device.
+      </p>
+    </details>
+  );
+}
+
+/** Wraps Markdown tables so wide ones scroll instead of breaking the layout. */
+const MARKDOWN_COMPONENTS = {
+  table: ({ children }: { children?: React.ReactNode }) => (
+    <div className="table-scroll"><table>{children}</table></div>
+  ),
+};
+
+type UsageInfo = { remaining: number | null; limit: number; tier: LimitTier; limitsActive: boolean };
+
 export default function Page() {
   const [privacyNotice, setPrivacyNotice] = useState<string | null>(null);
   const [remaining, setRemaining] = useState<number | null>(null);
   const [answerHeld, setAnswerHeld] = useState(false);
+  const [usage, setUsage] = useState<UsageInfo | null>(null);
+  const [limitTier, setLimitTier] = useState<LimitTier | null>(null);
+
+  // Show how many questions are left before the first one is asked.
+  useEffect(() => {
+    fetch('/api/usage', { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: UsageInfo | null) => {
+        if (!data) return;
+        setUsage(data);
+        if (data.limitsActive && data.remaining === 0) setLimitTier(data.tier);
+      })
+      .catch(() => {});
+  }, []);
 
   const { messages, input, setInput, setMessages, handleInputChange, handleSubmit, status, error } = useChat({
     api: '/api/chat',
@@ -66,11 +121,20 @@ export default function Page() {
       setPrivacyNotice(notice ? decodeURIComponent(notice) : null);
       const left = res.headers.get('X-Questions-Remaining');
       setRemaining(left !== null ? Number(left) : null);
+      const reached = res.headers.get('X-Limit-Reached');
+      if (reached) setLimitTier(reached as LimitTier);
+      // That was the last question for today: show the upgrade panel under the answer.
+      else if (res.ok && left === '0') setLimitTier((res.headers.get('X-Questions-Tier') ?? 'free') as LimitTier);
       setAnswerHeld(res.headers.get('X-Answer-Check') === 'held');
     },
   });
   const isBusy = status === 'streaming' || status === 'submitted';
-  const limitReached = error?.message?.includes('Plans page');
+  const limitReached = limitTier !== null;
+  const left = remaining ?? usage?.remaining ?? null;
+  const usageLabel =
+    left === null || !usage?.limitsActive
+      ? 'ANSWERS CITE THE LIBRARY'
+      : `${left} OF ${usage.limit} ${usage.tier === 'anonymous' || usage.tier === 'free' ? 'FREE ' : ''}QUESTIONS LEFT TODAY`;
 
   return (
     <main className="guide-shell">
@@ -128,7 +192,7 @@ export default function Page() {
         <header className="workspace-bar">
           <div className="breadcrumb"><span>RESEARCH DESK</span><b>/</b> INVESTMENT LIBRARY</div>
           <div className="source-count">
-            <span className="ready-dot" /> {remaining !== null ? `${remaining} QUESTIONS LEFT TODAY` : 'ANSWERS CITE THE LIBRARY'}
+            <span className="ready-dot" /> <span className="usage-meter">{usageLabel}</span>
           </div>
         </header>
 
@@ -162,7 +226,7 @@ export default function Page() {
                       <span className="message-speaker">{message.role === 'user' ? 'YOU' : 'LIBRARY'}</span>
                       {message.role === 'assistant' ? (
                         <div className="message-bubble markdown-body">
-                          <ReactMarkdown>{message.content}</ReactMarkdown>
+                          <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>{message.content}</ReactMarkdown>
                         </div>
                       ) : (
                         <div className="message-bubble">{message.content}</div>
@@ -174,6 +238,11 @@ export default function Page() {
                           if (invocation.toolName === 'projectWealth') {
                             return (invocation.result as { ok?: boolean })?.ok ? (
                               <ProjectionFromArgs key={invocation.toolCallId} args={invocation.args} />
+                            ) : null;
+                          }
+                          if (invocation.toolName === 'projectHousehold') {
+                            return (invocation.result as { ok?: boolean })?.ok ? (
+                              <HouseholdFromArgs key={invocation.toolCallId} args={invocation.args} />
                             ) : null;
                           }
                           if (invocation.toolName !== 'getInformation') return null;
@@ -220,16 +289,14 @@ export default function Page() {
                   <span /> {answerHeld ? 'Preparing and checking an educational answer…' : 'Searching the library…'}
                 </li>
               )}
-              {error && (
-                <li className="error-message">
-                  {error.message || 'The request could not be completed.'}
-                  {limitReached && <> <Link href="/pricing">See plans</Link></>}
-                </li>
+              {error && !limitReached && (
+                <li className="error-message">{error.message || 'The request could not be completed.'}</li>
               )}
             </ul>
           )}
 
-          {messages.length === 0 && error && <p className="error-message">{error.message}</p>}
+          {messages.length === 0 && error && !limitReached && <p className="error-message">{error.message}</p>}
+          {limitTier && <UpgradePanel tier={limitTier} />}
 
           <div className="composer-wrap">
             {privacyNotice && (
@@ -244,11 +311,11 @@ export default function Page() {
                 id="question-input"
                 value={input}
                 onChange={handleInputChange}
-                placeholder="Ask about ETFs, KiwiSaver, FIF tax or your retirement numbers…"
-                disabled={isBusy}
+                placeholder={limitReached ? "You've used today's questions" : 'Ask about ETFs, KiwiSaver, FIF tax or your retirement numbers…'}
+                disabled={isBusy || limitReached}
                 maxLength={2000}
               />
-              <button className="send-button" type="submit" aria-label="Send question" disabled={!input.trim() || isBusy}>
+              <button className="send-button" type="submit" aria-label="Send question" disabled={!input.trim() || isBusy || limitReached}>
                 <span aria-hidden="true">↑</span>
               </button>
             </form>

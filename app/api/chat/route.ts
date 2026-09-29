@@ -9,8 +9,9 @@
  *     model, search or logs see them. Payment card data blocks the request
  *     entirely (422) and is never processed or stored.
  *  3. Quota: daily question limit by plan, plus a per-minute burst limit.
- *  4. Answer. The model can call getInformation (library search) and
- *     projectWealth (projection engine; the model never does maths).
+ *  4. Answer. The model can call getInformation (library search),
+ *     projectWealth (one savings pot) and projectHousehold (a whole household:
+ *     several assets, properties, incomes and expenses). The model never does maths.
  *     - Normal questions stream straight to the reader.
  *     - Personal-advice questions ("Should I sell…?") have their answer text
  *       held back, checked, rewritten once if needed, or replaced with a safe
@@ -32,6 +33,8 @@ import {
 } from '../../../lib/guardrails/advice';
 import { adviceGuardTransform } from '../../../lib/guardrails/adviceGuard';
 import { projectWealth, summariseProjection, ProjectionInputSchema } from '../../../lib/finance/projections';
+import { HouseholdInputSchema, projectHousehold, summariseHousehold } from '../../../lib/finance/household';
+import { analyseHousehold, summariseAnalysis } from '../../../lib/finance/householdAnalysis';
 import { checkQuota } from '../../../lib/entitlements';
 import { getViewer } from '../../../lib/viewer';
 import { assertSameOrigin, readJsonBody, sanitizeChatMessages, CHAT_LIMITS } from '../../../lib/security';
@@ -74,7 +77,17 @@ export async function POST(req: Request) {
   // 3. Quota
   const viewer = await getViewer(req);
   const quota = await checkQuota(viewer.key, viewer.plan, Boolean(viewer.userId));
-  if (!quota.allowed) return text(quota.reason ?? 'Daily limit reached.', quota.notConfigured ? 503 : 429);
+  if (!quota.allowed) {
+    const status = quota.notConfigured ? 503 : 429;
+    return new Response(quota.reason ?? 'Daily limit reached.', {
+      status,
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Cache-Control': 'no-store',
+        ...(quota.limitReached ? { 'X-Limit-Reached': quota.tier ?? 'free', 'X-Questions-Remaining': '0' } : {}),
+      },
+    });
+  }
 
   const latestText = messages[messages.length - 1].content;
   const holdForCheck = isPersonalAdviceRequest(latestText);
@@ -136,6 +149,19 @@ export async function POST(req: Request) {
           }
         },
       }),
+      projectHousehold: tool({
+        description:
+          "Project a whole household in one run: one person or a couple, cash, several investments (KiwiSaver, shares, funds), properties with their mortgages, other assets and debts, incomes (salary, dividends, rent, pensions such as NZ Super) and expenses (living costs, children, parents, pets, other). Monthly surplus is reinvested and shortfalls are drawn from savings. Optionally compares several return assumptions side by side. Returns net worth at each age in today's dollars, when money runs out, goal progress, warnings, and a portfolio analysis (strengths, weaknesses, risks, and measured levers to explore).",
+        parameters: HouseholdInputSchema,
+        execute: async (input) => {
+          try {
+            const projection = projectHousehold(input);
+            return { ok: true as const, ...summariseHousehold(projection), analysis: summariseAnalysis(analyseHousehold(projection)) };
+          } catch (e) {
+            return { ok: false as const, error: e instanceof Error ? e.message : 'Invalid inputs' };
+          }
+        },
+      }),
     },
     maxSteps: 5,
     ...(holdForCheck
@@ -166,6 +192,8 @@ export async function POST(req: Request) {
   const headers: Record<string, string> = { 'Cache-Control': 'no-store' };
   if (latestRedaction?.userNotice) headers['X-Privacy-Notice'] = encodeURIComponent(latestRedaction.userNotice);
   if (quota.remaining !== null) headers['X-Questions-Remaining'] = String(quota.remaining);
+  if (quota.limit !== undefined) headers['X-Questions-Limit'] = String(quota.limit);
+  if (quota.tier) headers['X-Questions-Tier'] = quota.tier;
   if (holdForCheck) headers['X-Answer-Check'] = 'held';
 
   return result.toDataStreamResponse({

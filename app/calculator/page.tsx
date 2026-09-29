@@ -1,11 +1,11 @@
 import type { Metadata } from 'next';
 import SiteHeader from '../../components/SiteHeader';
 import PlatformComparison from '../../components/PlatformComparison';
-import WealthProjector from '../../components/WealthProjector';
+import HouseholdPlanner from '../../components/HouseholdPlanner';
 
 export const metadata: Metadata = {
   title: 'Wealth projector · Investment Research Library',
-  description: 'Project your savings to retirement in today\'s dollars, with low, expected and high scenarios.',
+  description: 'Project your household\'s net worth to retirement and beyond, for one person or a couple, in today\'s dollars.',
 };
 
 export default function CalculatorPage() {
@@ -15,10 +15,10 @@ export default function CalculatorPage() {
       <main className="page-main">
         <h1 className="page-title">Wealth projector</h1>
         <p className="page-lede">
-          See where your savings could be at each age, whether you&apos;re on track for your goal, and how much the
-          answer depends on returns. Change any number and the results update.
+          Put your whole household in one place: cash, investments, KiwiSaver, property, income, pensions, children,
+          parents, pets and other costs, for one person or a couple. Change any number and the results update.
         </p>
-        <WealthProjector />
+        <HouseholdPlanner />
         <PlatformComparison />
       </main>
     </div>

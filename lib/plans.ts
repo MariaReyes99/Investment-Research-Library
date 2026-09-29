@@ -11,6 +11,13 @@ export const PLANS: Record<Plan, { label: string; priceNzd: number; dailyQuestio
 
 export const PAID_PLANS: PaidPlan[] = ['basic', 'premium', 'pro'];
 
+/**
+ * Questions a day for visitors who haven't signed in. Kept below the free plan
+ * so there's a reason to create a free account, and so the count can't be reset
+ * by clearing the browser. Set to 0 to require sign-in before any question.
+ */
+export const ANONYMOUS_DAILY_QUESTIONS = 2;
+
 export function planFrom(metadata: unknown): Plan {
   const p = (metadata as { plan?: string } | undefined)?.plan;
   return p === 'basic' || p === 'premium' || p === 'pro' ? p : 'free';
