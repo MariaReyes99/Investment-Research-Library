@@ -1,0 +1,87 @@
+{
+  "FIF_Tax_Guides/fif-basics.md": {
+    "title": "Foreign investment fund (FIF) tax basics (as at September 2026)",
+    "url": "",
+    "licence": "own-content",
+    "publisher": "Investment Research Library",
+    "asOf": "2026-09-29"
+  },
+  "KiwiSaver_Guides/kiwisaver-basics.md": {
+    "title": "KiwiSaver basics (as at September 2026)",
+    "url": "",
+    "licence": "own-content",
+    "publisher": "Investment Research Library",
+    "asOf": "2026-09-29"
+  },
+  "Library_Notes/asset-allocation-and-rebalancing.md": {
+    "title": "Asset allocation, diversification and rebalancing",
+    "url": "",
+    "licence": "own-content",
+    "publisher": "Investment Research Library",
+    "asOf": "2026-09-29"
+  },
+  "Library_Notes/compounding-and-projections.md": {
+    "title": "Compounding and wealth projections",
+    "url": "",
+    "licence": "own-content",
+    "publisher": "Investment Research Library",
+    "asOf": "2026-09-29"
+  },
+  "Library_Notes/currency-exposure-and-hedging.md": {
+    "title": "Currency exposure and hedging for Kiwi investors",
+    "url": "",
+    "licence": "own-content",
+    "publisher": "Investment Research Library",
+    "asOf": "2026-09-29"
+  },
+  "Library_Notes/etf-domicile-for-nz-investors.md": {
+    "title": "ETF domicile: US-listed versus Irish-domiciled ETFs for NZ investors",
+    "url": "",
+    "licence": "own-content",
+    "publisher": "Investment Research Library",
+    "asOf": "2026-09-29"
+  },
+  "Library_Notes/index-funds-and-costs.md": {
+    "title": "Index funds and why costs matter",
+    "url": "",
+    "licence": "own-content",
+    "publisher": "Investment Research Library",
+    "asOf": "2026-09-29"
+  },
+  "Library_Notes/investing-through-market-crashes.md": {
+    "title": "Investing psychology: market crashes, FOMO and staying the course",
+    "url": "",
+    "licence": "own-content",
+    "publisher": "Investment Research Library",
+    "asOf": "2026-09-29"
+  },
+  "Library_Notes/lump-sum-vs-dollar-cost-averaging.md": {
+    "title": "Lump sum versus dollar-cost averaging",
+    "url": "",
+    "licence": "own-content",
+    "publisher": "Investment Research Library",
+    "asOf": "2026-09-29"
+  },
+  "Library_Notes/mortgage-vs-investing.md": {
+    "title": "Paying off the mortgage versus investing",
+    "url": "",
+    "licence": "own-content",
+    "publisher": "Investment Research Library",
+    "asOf": "2026-09-29"
+  },
+  "Library_Notes/safe-withdrawal-rates.md": {
+    "title": "Safe withdrawal rates and the 4% rule",
+    "url": "",
+    "licence": "own-content",
+    "publisher": "Investment Research Library",
+    "asOf": "2026-09-29"
+  },
+  "_example_licensed_pdf.pdf": {
+    "title": "Example: add third-party documents like this",
+    "url": "https://example.org/source",
+    "licence": "permission-granted",
+    "publisher": "Name of rights holder",
+    "asOf": "2026-09-29",
+    "note": "Delete this example. licence must be one of own-content, public-domain, cc-by, permission-granted, licensed, personal-study-only."
+  }
+}
