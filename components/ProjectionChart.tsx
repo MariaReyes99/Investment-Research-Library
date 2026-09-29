@@ -102,8 +102,8 @@ export function ProjectionSummary({ result }: { result: ProjectionResult }) {
   return (
     <div className="projection-summary">
       <p className="projection-headline">
-        At {result.inputs.retirementAge} you could have about <strong>{money(base.atRetirement.real)}</strong> in
-        today&apos;s dollars, enough for roughly <strong>{money(base.sustainableIncomeReal)}</strong> a year at a{' '}
+        At {result.inputs.retirementAge}, projected net worth is about <strong>{money(base.atRetirement.real)}</strong> in
+        today&apos;s dollars. Income-eligible assets support an illustrative <strong>{money(base.sustainableIncomeReal)}</strong> a year at a{' '}
         {result.inputs.withdrawalRatePct}% withdrawal rate.
       </p>
       {goal && (

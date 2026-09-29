@@ -94,23 +94,19 @@ export async function POST(req: Request) {
     tools: {
       getInformation: tool({
         description:
-          'Search the Investment Research Library. Optionally limit to one or more collections; use an empty array to search everything.',
+          'Search across every collection in the Investment Research Library and return the most relevant source passages.',
         parameters: z.object({
           query: z.string().max(500).describe('the topic, term, or sub-question to search for'),
-          collections: z.array(z.enum(COLLECTION_IDS)).max(COLLECTION_IDS.length).describe('collections to search; empty array = all collections'),
         }),
-        execute: async ({ query, collections }) => {
+        execute: async ({ query }) => {
           const { embedding } = await embed({
             model: openai.embedding(process.env.EMBEDDING_MODEL ?? 'text-embedding-3-small', { user: openaiUser }),
             value: redactPII(query).clean,
           });
-          // collections are validated against a fixed list, so the filter can't be injected
-          const filter = collections.length ? collections.map((c) => `collection = '${c}'`).join(' OR ') : undefined;
           const hits = await index.query({
             vector: embedding,
             topK: TOP_K,
             includeMetadata: true,
-            ...(filter ? { filter } : {}),
           });
           return hits
             .filter((h) => h.score >= MIN_SCORE)

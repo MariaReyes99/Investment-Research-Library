@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import SiteHeader from '../../components/SiteHeader';
+import PlatformComparison from '../../components/PlatformComparison';
 import WealthProjector from '../../components/WealthProjector';
 
 export const metadata: Metadata = {
@@ -18,6 +19,7 @@ export default function CalculatorPage() {
           answer depends on returns. Change any number and the results update.
         </p>
         <WealthProjector />
+        <PlatformComparison />
       </main>
     </div>
   );

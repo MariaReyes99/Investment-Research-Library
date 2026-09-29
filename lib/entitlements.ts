@@ -40,23 +40,38 @@ const NOT_CONFIGURED: QuotaResult = {
 };
 
 export async function checkQuota(viewerKey: string, plan: Plan, signedIn: boolean): Promise<QuotaResult> {
-  if (!limiters || !burst) return mustLimit ? NOT_CONFIGURED : { allowed: true, remaining: null };
-  const b = await burst.limit(viewerKey);
-  if (!b.success) return { allowed: false, remaining: 0, reason: 'Too many questions in a short time. Wait a minute and try again.' };
-  const r = await limiters[plan].limit(viewerKey);
-  if (r.success) return { allowed: true, remaining: r.remaining };
-  return {
-    allowed: false,
-    remaining: 0,
-    reason:
-      plan === 'free'
-        ? `You've used today's ${PLANS.free.dailyQuestions} free questions. ${signedIn ? 'Upgrade on the Plans page' : 'Sign in and upgrade on the Plans page'} for more, or come back tomorrow.`
-        : "You've reached today's fair-use limit. It resets within 24 hours.",
-  };
+  if (!mustLimit) return { allowed: true, remaining: null };
+  if (!limiters || !burst) return NOT_CONFIGURED;
+  try {
+    const b = await burst.limit(viewerKey);
+    if (!b.success) return { allowed: false, remaining: 0, reason: 'Too many questions in a short time. Wait a minute and try again.' };
+    const r = await limiters[plan].limit(viewerKey);
+    if (r.success) return { allowed: true, remaining: r.remaining };
+    return {
+      allowed: false,
+      remaining: 0,
+      reason:
+        plan === 'free'
+          ? `You've used today's ${PLANS.free.dailyQuestions} free questions. ${signedIn ? 'Upgrade on the Plans page' : 'Sign in and upgrade on the Plans page'} for more, or come back tomorrow.`
+          : "You've reached today's fair-use limit. It resets within 24 hours.",
+    };
+  } catch {
+    return {
+      allowed: false,
+      notConfigured: true,
+      remaining: 0,
+      reason: 'The library is temporarily unavailable because usage limits could not be checked. Please try again later.',
+    };
+  }
 }
 
 /** Limit checkout attempts (stops scripted card-testing and checkout spam). */
 export async function checkCheckoutLimit(viewerKey: string): Promise<boolean> {
-  if (!checkoutLimit) return !mustLimit;
-  return (await checkoutLimit.limit(viewerKey)).success;
+  if (!mustLimit) return true;
+  if (!checkoutLimit) return false;
+  try {
+    return (await checkoutLimit.limit(viewerKey)).success;
+  } catch {
+    return false;
+  }
 }

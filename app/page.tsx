@@ -178,11 +178,11 @@ export default function Page() {
                           }
                           if (invocation.toolName !== 'getInformation') return null;
                           const sources = invocation.result as Source[];
-                          const scopes = (invocation.args as { collections?: string[] })?.collections ?? [];
+                          const scopes = [...new Set(sources.map((source) => source.collection).filter((collection): collection is string => Boolean(collection)))];
                           return (
-                            <details className="source-disclosure" key={invocation.toolCallId}>
+                            <details className="source-disclosure" key={invocation.toolCallId} open={isLastAssistant}>
                               <summary>
-                                Sources
+                                Sources used
                                 {scopes.length > 0 && <> · {scopes.map(collectionLabel).join(', ')}</>}{' '}
                                 <span>{sources.length}</span>
                               </summary>

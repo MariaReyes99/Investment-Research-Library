@@ -12,6 +12,7 @@ export const COLLECTIONS = [
   { id: 'MSCI_Methodologies', label: 'MSCI methodologies', description: 'How MSCI indexes are built and weighted' },
   { id: 'NZX_Guides', label: 'NZX guides', description: 'NZX investor guides for the New Zealand share market' },
   { id: 'KiwiSaver_Guides', label: 'KiwiSaver', description: 'KiwiSaver fund types, contribution rates and government contributions' },
+  { id: 'Australia_Guides', label: 'Australia', description: 'Australian superannuation, ETF and investment-platform information' },
   { id: 'FIF_Tax_Guides', label: 'FIF tax', description: 'NZ foreign investment fund (FIF) tax rules, de minimis threshold, FDR and CV methods' },
 ] as const;
 
