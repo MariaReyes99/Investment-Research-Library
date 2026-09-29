@@ -13,17 +13,40 @@ A cited investing research assistant and wealth projector for New Zealand and Au
 
 ## Guardrails
 
+### Privacy
+
 | Risk | Protection | Where |
 |---|---|---|
-| Card details in chat | Blocked (HTTP 422), never sent to OpenAI or logged | `lib/guardrails/pii.ts`, chat route |
-| Personal details | Email, phone, IRD number (checksum), NZ bank account, address, date of birth, passport/licence and API keys removed before OpenAI, search or logs; the user is told | same |
-| Card storage | Stripe's hosted checkout; the app stores only the plan name on the Clerk user | `app/api/checkout`, `app/api/stripe/webhook` |
-| Faked upgrades | Stripe webhook signature verified | webhook route |
-| Personal advice | System prompt limits, advice-style questions steered to education, advice wording logged for review, disclaimer under every answer | `lib/guardrails/advice.ts` |
-| Prompt injection from documents | Retrieved text treated as reference, not instructions | system prompt |
-| Cost abuse | Question length and history caps, daily quota per plan, burst limit per minute | `lib/entitlements.ts` |
-| Copyright | Only files with a publishable licence in `data/corpus/sources.json` are indexed | `lib/seed.ts` |
-| Visitor tracking | Anonymous visitors counted by a salted hash of their IP address, never the raw IP | `lib/viewer.ts` |
+| Card details in chat | The request is blocked (HTTP 422). Card data is never sent to OpenAI, searched or logged. | `lib/guardrails/pii.ts`, chat route |
+| Personal details | Email, phone, IRD number (checksum), NZ bank account, address, date of birth, passport/licence and API keys are removed from every user message before OpenAI, search or logs see them, and the user is told. | same |
+| Card storage | Payment happens on Stripe's hosted checkout. The app stores only the plan name on the Clerk user. | `app/api/checkout`, `app/api/stripe/webhook` |
+| Visitor tracking | Anonymous visitors are counted by a salted hash of their IP address, never the raw IP. OpenAI receives only a hashed, anonymous user id. | `lib/viewer.ts`, chat route |
+| Calculator inputs | The projector runs in the browser; nothing entered there is sent. | `components/WealthProjector.tsx` |
+| Logs | `safeLog` redacts every string it logs; questions are never logged. | `lib/guardrails/pii.ts` |
+
+### Attacks and abuse
+
+| Attack | Protection | Where |
+|---|---|---|
+| Cross-site request forgery (another site using a visitor's browser) | Same-origin check on `/api/chat` and `/api/checkout` (403) | `lib/security.ts` |
+| Prompt injection through forged messages | The conversation is rebuilt from an allowlist: only user and assistant text. Client-supplied `system` messages, tool results, attachments and extra fields are dropped. | `sanitizeChatMessages` |
+| Prompt injection through documents | Retrieved text is treated as reference, not instructions. Search filters use a fixed list of collections, so they can't be injected. | system prompt, chat route |
+| Oversized requests / cost attacks | JSON only (415), 256 KB body cap (413), 2,000 characters per question, 12-message history, 100-message cap | `lib/security.ts` |
+| Scripted abuse | Daily quota per plan, 8 questions per minute burst limit, 5 checkout attempts per 10 minutes. **In production the API refuses to run without Redis** rather than running unlimited. | `lib/entitlements.ts` |
+| Faked upgrades | Stripe webhook signature verified; 1 MB payload cap. The plan lives in Clerk `publicMetadata`, which users can't edit from the browser. | webhook route |
+| Script injection (XSS), clickjacking | Content Security Policy (only this site, plus Clerk when configured), `X-Frame-Options: DENY`, `nosniff`, HSTS, strict referrer and permissions policies. Answers are rendered as Markdown without raw HTML, and only `http(s)` source links are shown. | `next.config.mjs`, `app/page.tsx` |
+| Server fingerprinting | `X-Powered-By` header removed; error messages to users are generic. | `next.config.mjs`, routes |
+
+### Financial advice and copyright
+
+| Risk | Protection | Where |
+|---|---|---|
+| Personal advice | Normal questions stream, and advice-style wording is logged for review. **Questions asking for a personal recommendation** ("Should I sell…?") have their answer text held back, checked, rewritten once if needed, or replaced with a safe fallback before the reader sees it. Sources and charts still stream. | `lib/guardrails/advice.ts`, `lib/guardrails/adviceGuard.ts` |
+| Copyright | Only files with a publishable licence in `data/corpus/sources.json` are indexed. | `lib/seed.ts` |
+
+### Known dependency advisories
+
+`npm audit` reports advisories in the AI SDK (v4) and Next.js (v15) dependency trees. They affect features this app doesn't use (image optimisation, build-time CSS processing, a diff formatter). Fixing them requires major upgrades (AI SDK 7, Next.js 16), which change the chat code, so plan that as a separate piece of work. Re-run `npm audit --omit=dev` regularly.
 
 ## Architecture
 
@@ -77,7 +100,7 @@ npm run dev                    # http://localhost:3000
 
 ## Going live (in this order)
 
-1. **Free public launch.** Set the OpenAI, Upstash Vector and Upstash Redis variables in Vercel. Without Clerk keys the site runs free and anonymous, with 5 questions a day per visitor.
+1. **Free public launch.** Set the OpenAI, Upstash Vector, Upstash Redis and `IP_HASH_SALT` variables in Vercel. (Without Redis the chat refuses questions in production.) Without Clerk keys the site runs free and anonymous, with 5 questions a day per visitor.
 2. **Accounts.** Create a Clerk application and add its two keys. Sign-in appears automatically.
 3. **Payments.**
    - In Stripe, create three monthly NZD prices and add their IDs.
@@ -89,9 +112,11 @@ npm run dev                    # http://localhost:3000
 
 ## Tests
 
-`npm test` runs 14 tests. They check:
+`npm test` runs 23 tests. They check:
 - the projection engine against the closed-form future-value formula;
 - real (today's dollar) values, scenarios, goal solving and money running out;
 - redaction of cards, NZ identifiers and secrets, while keeping ages and amounts;
 - the IRD and Luhn checksums;
-- advice detection.
+- advice detection;
+- the answer check: safe answers pass, advice is rewritten, failed rewrites fall back, and sources still arrive first (using the AI SDK's mock model);
+- request security: cross-site rejection, body size and type limits, dropping of forged system messages and tool results, history caps and link safety.

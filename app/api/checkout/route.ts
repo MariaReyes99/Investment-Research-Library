@@ -7,7 +7,9 @@
  */
 import Stripe from 'stripe';
 import { z } from 'zod';
-import { clerkEnabled } from '../../../lib/viewer';
+import { clerkEnabled, getViewer } from '../../../lib/viewer';
+import { checkCheckoutLimit } from '../../../lib/entitlements';
+import { assertSameOrigin, readJsonBody } from '../../../lib/security';
 
 const PRICE_IDS = {
   basic: process.env.STRIPE_PRICE_BASIC,
@@ -17,9 +19,11 @@ const PRICE_IDS = {
 
 const Body = z.object({ plan: z.enum(['basic', 'premium', 'pro']) });
 
-const json = (body: unknown, status = 200) => Response.json(body, { status });
+const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
 
 export async function POST(req: Request) {
+  const crossSite = assertSameOrigin(req);
+  if (crossSite) return json({ error: crossSite.message }, crossSite.status);
   if (!process.env.STRIPE_SECRET_KEY || !clerkEnabled) {
     return json({ error: 'Paid plans are not open yet.' }, 503);
   }
@@ -27,7 +31,12 @@ export async function POST(req: Request) {
   const { userId } = await auth();
   if (!userId) return json({ error: 'Sign in to choose a plan.' }, 401);
 
-  const parsed = Body.safeParse(await req.json().catch(() => null));
+  const viewer = await getViewer(req);
+  if (!(await checkCheckoutLimit(viewer.key))) return json({ error: 'Too many checkout attempts. Try again in a few minutes.' }, 429);
+
+  const body = await readJsonBody(req, 1024);
+  if (!body.ok) return json({ error: body.message }, body.status);
+  const parsed = Body.safeParse(body.data);
   if (!parsed.success) return json({ error: 'Unknown plan.' }, 400);
   const price = PRICE_IDS[parsed.data.plan];
   if (!price) return json({ error: 'This plan is not available yet.' }, 503);
@@ -41,6 +50,8 @@ export async function POST(req: Request) {
     metadata: { userId, plan: parsed.data.plan },
     subscription_data: { metadata: { userId, plan: parsed.data.plan } },
     allow_promotion_codes: true,
+    // GST: turn on once you're GST-registered and Stripe Tax is set up.
+    ...(process.env.STRIPE_AUTOMATIC_TAX === 'true' ? { automatic_tax: { enabled: true } } : {}),
     success_url: `${origin}/pricing?upgraded=1`,
     cancel_url: `${origin}/pricing`,
   });

@@ -40,6 +40,7 @@ export async function POST(req: Request) {
     return new Response('Stripe is not configured.', { status: 503 });
   }
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+  if (Number(req.headers.get('content-length') ?? '0') > 1_000_000) return new Response('Payload too large.', { status: 413 });
   const signature = req.headers.get('stripe-signature');
   if (!signature) return new Response('Missing signature.', { status: 400 });
 

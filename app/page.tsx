@@ -9,6 +9,7 @@ import { MilestoneTable, ProjectionChart } from '../components/ProjectionChart';
 import { collectionLabel } from '../lib/collections';
 import { projectWealth, type ProjectionInput } from '../lib/finance/projections';
 import { DISCLAIMER } from '../lib/guardrails/advice';
+import { safeHttpUrl } from '../lib/security';
 
 type Source = {
   text?: string; source?: string; document?: string; section?: string;
@@ -56,6 +57,7 @@ function ProjectionFromArgs({ args }: { args: unknown }) {
 export default function Page() {
   const [privacyNotice, setPrivacyNotice] = useState<string | null>(null);
   const [remaining, setRemaining] = useState<number | null>(null);
+  const [answerHeld, setAnswerHeld] = useState(false);
 
   const { messages, input, setInput, setMessages, handleInputChange, handleSubmit, status, error } = useChat({
     api: '/api/chat',
@@ -64,6 +66,7 @@ export default function Page() {
       setPrivacyNotice(notice ? decodeURIComponent(notice) : null);
       const left = res.headers.get('X-Questions-Remaining');
       setRemaining(left !== null ? Number(left) : null);
+      setAnswerHeld(res.headers.get('X-Answer-Check') === 'held');
     },
   });
   const isBusy = status === 'streaming' || status === 'submitted';
@@ -187,8 +190,8 @@ export default function Page() {
                                 {sources.map((source, index) => (
                                   <li className="source-item" key={`${source.source}-${index}`} title={source.document || undefined}>
                                     <span className="source-meta">
-                                      {source.url ? (
-                                        <a href={source.url} target="_blank" rel="noreferrer">{source.document || source.source}</a>
+                                      {safeHttpUrl(source.url) ? (
+                                        <a href={safeHttpUrl(source.url)} target="_blank" rel="noopener noreferrer">{source.document || source.source}</a>
                                       ) : (
                                         source.document || source.source
                                       )}{' '}
@@ -212,7 +215,11 @@ export default function Page() {
                   </li>
                 );
               })}
-              {isBusy && <li className="typing-status"><span /> Searching the library…</li>}
+              {isBusy && (
+                <li className="typing-status">
+                  <span /> {answerHeld ? 'Preparing and checking an educational answer…' : 'Searching the library…'}
+                </li>
+              )}
               {error && (
                 <li className="error-message">
                   {error.message || 'The request could not be completed.'}

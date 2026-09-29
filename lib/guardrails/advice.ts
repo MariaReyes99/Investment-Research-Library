@@ -60,3 +60,11 @@ const OUTPUT_RED_FLAGS: { re: RegExp; reason: string }[] = [
 export function outputRedFlags(answer: string): string[] {
   return OUTPUT_RED_FLAGS.filter((f) => f.re.test(answer)).map((f) => f.reason);
 }
+
+/** Instruction for the one-off rewrite of an answer that failed the check. */
+export const REWRITE_INSTRUCTION =
+  'Rewrite the DRAFT ANSWER so it is educational only. Remove any instruction to buy, sell, hold or switch, any ranking of what is best for this person, and any claim of guaranteed or risk-free returns. Keep the explanations, trade-offs, citations in square brackets and every number exactly as given. Output only the rewritten answer.';
+
+/** Shown if an answer still fails the check after one rewrite. */
+export const SAFE_FALLBACK =
+  "I can explain how these options work, compare their trade-offs, and project scenarios with your numbers, but I can't tell you personally what to buy, sell or hold. Try asking \"What are the trade-offs between these options?\" or \"Project my savings to age 65\". For a personal recommendation, a licensed financial adviser can help.";

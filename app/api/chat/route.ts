@@ -1,97 +1,70 @@
 /**
- * Chat route handler: streaming RAG with two tools and guardrails.
+ * Chat route handler: streaming RAG with two tools and layered guardrails.
  *
  * Request pipeline, in order:
- *  1. Validate the body (as before: size limit, history cap).
- *  2. Privacy: redact personal details from every user message before the
- *     model, logs or vector search see them. Payment card data blocks the
- *     request entirely (422) and is never processed.
- *  3. Quota: daily question limit by plan (anonymous visitors = free).
- *  4. Stream an answer. The model can call:
- *       getInformation - search the library, optionally by collection
- *       projectWealth  - run the projection engine (the model never does maths)
- *  5. Monitoring: advice-style wording in the finished answer is logged.
- *
- * Privacy and quota information is returned in response headers, which the
- * page reads in useChat's onResponse.
+ *  1. Security: same-origin check (CSRF), JSON-only body with a size cap, and
+ *     the conversation rebuilt from an allowlist (no client-supplied system
+ *     messages, tool results, attachments or oversized history).
+ *  2. Privacy: personal details are removed from every user message before the
+ *     model, search or logs see them. Payment card data blocks the request
+ *     entirely (422) and is never processed or stored.
+ *  3. Quota: daily question limit by plan, plus a per-minute burst limit.
+ *  4. Answer. The model can call getInformation (library search) and
+ *     projectWealth (projection engine; the model never does maths).
+ *     - Normal questions stream straight to the reader.
+ *     - Personal-advice questions ("Should I sell…?") have their answer text
+ *       held back, checked, rewritten once if needed, or replaced with a safe
+ *       fallback before the reader sees it. Sources and charts still stream.
  */
-import { streamText, tool, embed, type Message } from 'ai';
+import { streamText, generateText, tool, embed } from 'ai';
 import { Index } from '@upstash/vector';
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { createOpenAIProvider } from '../../../lib/openai';
 import { COLLECTION_IDS, VECTOR_NAMESPACE } from '../../../lib/collections';
 import { redactPII, safeLog, type RedactionResult } from '../../../lib/guardrails/pii';
-import { SYSTEM_PROMPT, PERSONAL_ADVICE_STEER, isPersonalAdviceRequest, outputRedFlags } from '../../../lib/guardrails/advice';
+import {
+  SYSTEM_PROMPT,
+  PERSONAL_ADVICE_STEER,
+  REWRITE_INSTRUCTION,
+  isPersonalAdviceRequest,
+  outputRedFlags,
+} from '../../../lib/guardrails/advice';
+import { adviceGuardTransform } from '../../../lib/guardrails/adviceGuard';
 import { projectWealth, summariseProjection, ProjectionInputSchema } from '../../../lib/finance/projections';
 import { checkQuota } from '../../../lib/entitlements';
 import { getViewer } from '../../../lib/viewer';
+import { assertSameOrigin, readJsonBody, sanitizeChatMessages, CHAT_LIMITS } from '../../../lib/security';
 
 // Allow up to 30 seconds for retrieval plus streaming on Vercel.
 export const maxDuration = 30;
 
 const index = new Index().namespace(VECTOR_NAMESPACE);
 
-const MAX_MESSAGE_CHARS = 2000;
-const MAX_HISTORY_MESSAGES = 12;
 const TOP_K = 6;
 const MIN_SCORE = 0.3;
 
-type IncomingMessage = Pick<Message, 'role' | 'content'> & { parts?: Message['parts'] };
-
-/** Redact a user message's text in both `content` and text `parts`. */
-function redactMessage(m: IncomingMessage): { message: IncomingMessage; result: RedactionResult } {
-  const result = redactPII(typeof m.content === 'string' ? m.content : '');
-  const findings = { ...result.findings };
-  let blocked = result.blocked;
-  let userNotice = result.userNotice;
-  const parts = m.parts?.map((p) => {
-    if (p.type !== 'text') return p;
-    const r = redactPII(p.text);
-    for (const [k, n] of Object.entries(r.findings)) {
-      const key = k as keyof typeof findings;
-      findings[key] = Math.max(findings[key] ?? 0, n ?? 0);
-    }
-    if (r.blocked) blocked = true;
-    if (r.blocked || !userNotice) userNotice = r.userNotice ?? userNotice;
-    return { ...p, text: r.clean };
-  });
-  return {
-    message: { ...m, content: result.clean, ...(parts ? { parts } : {}) },
-    result: { clean: result.clean, findings, blocked, userNotice },
-  };
-}
-
 const text = (body: string, status: number) =>
-  new Response(body, { status, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+  new Response(body, { status, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });
 
 export async function POST(req: Request) {
-  // 1. Validate
-  let body: { messages?: IncomingMessage[] };
-  try {
-    body = await req.json();
-  } catch {
-    return text('Invalid JSON body.', 400);
-  }
-  const messages = body.messages;
-  if (!Array.isArray(messages) || messages.length === 0) {
-    return text('Request must include a non-empty messages array.', 400);
-  }
-  const latest = messages[messages.length - 1];
-  if (typeof latest.content === 'string' && latest.content.length > MAX_MESSAGE_CHARS) {
-    return text(`Please keep questions under ${MAX_MESSAGE_CHARS} characters.`, 413);
-  }
+  // 1. Security
+  const crossSite = assertSameOrigin(req);
+  if (crossSite) return text(crossSite.message, crossSite.status);
 
-  let recent = messages.slice(-MAX_HISTORY_MESSAGES);
-  const firstUser = recent.findIndex((m) => m.role === 'user');
-  recent = firstUser > 0 ? recent.slice(firstUser) : recent;
+  const body = await readJsonBody(req, CHAT_LIMITS.maxBodyBytes);
+  if (!body.ok) return text(body.message, body.status);
 
-  // 2. Privacy: redact every user turn; block card data in the latest one
+  const cleaned = sanitizeChatMessages(body.data);
+  if (!cleaned.ok) return text(cleaned.message, cleaned.status);
+
+  // 2. Privacy: redact every user turn; card data in the latest one blocks the request
   let latestRedaction: RedactionResult | undefined;
-  recent = recent.map((m, i) => {
+  const messages = cleaned.messages.map((m, i, all) => {
     if (m.role !== 'user') return m;
-    const { message, result } = redactMessage(m);
-    if (i === recent.length - 1) latestRedaction = result;
-    return message;
+    const r = redactPII(m.content);
+    if (i === all.length - 1) latestRedaction = r;
+    return { ...m, content: r.clean };
   });
   if (latestRedaction?.blocked) {
     safeLog('blocked_payment_data', { findings: latestRedaction.findings });
@@ -101,32 +74,37 @@ export async function POST(req: Request) {
   // 3. Quota
   const viewer = await getViewer(req);
   const quota = await checkQuota(viewer.key, viewer.plan, Boolean(viewer.userId));
-  if (!quota.allowed) return text(quota.reason ?? 'Daily limit reached.', 429);
+  if (!quota.allowed) return text(quota.reason ?? 'Daily limit reached.', quota.notConfigured ? 503 : 429);
 
-  const latestText = recent[recent.length - 1].content ?? '';
-  const system = isPersonalAdviceRequest(latestText) ? `${SYSTEM_PROMPT}\n\n${PERSONAL_ADVICE_STEER}` : SYSTEM_PROMPT;
+  const latestText = messages[messages.length - 1].content;
+  const holdForCheck = isPersonalAdviceRequest(latestText);
+  const system = holdForCheck ? `${SYSTEM_PROMPT}\n\n${PERSONAL_ADVICE_STEER}` : SYSTEM_PROMPT;
+
+  // An anonymous, hashed id lets OpenAI trace abuse without any personal details.
+  const openaiUser = createHash('sha256').update(`openai:${viewer.key}`).digest('hex').slice(0, 32);
+  const openai = createOpenAIProvider();
+  const model = openai(process.env.CHAT_MODEL ?? 'gpt-4o-mini', { user: openaiUser });
 
   // 4. Answer
-  const openai = createOpenAIProvider();
   const result = streamText({
-    model: openai(process.env.CHAT_MODEL ?? 'gpt-4o-mini'),
+    model,
     temperature: 0.2,
     system,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    messages: recent as any,
+    messages,
     tools: {
       getInformation: tool({
         description:
           'Search the Investment Research Library. Optionally limit to one or more collections; use an empty array to search everything.',
         parameters: z.object({
-          query: z.string().describe('the topic, term, or sub-question to search for'),
-          collections: z.array(z.enum(COLLECTION_IDS)).describe('collections to search; empty array = all collections'),
+          query: z.string().max(500).describe('the topic, term, or sub-question to search for'),
+          collections: z.array(z.enum(COLLECTION_IDS)).max(COLLECTION_IDS.length).describe('collections to search; empty array = all collections'),
         }),
         execute: async ({ query, collections }) => {
           const { embedding } = await embed({
-            model: openai.embedding(process.env.EMBEDDING_MODEL ?? 'text-embedding-3-small'),
+            model: openai.embedding(process.env.EMBEDDING_MODEL ?? 'text-embedding-3-small', { user: openaiUser }),
             value: redactPII(query).clean,
           });
+          // collections are validated against a fixed list, so the filter can't be injected
           const filter = collections.length ? collections.map((c) => `collection = '${c}'`).join(' OR ') : undefined;
           const hits = await index.query({
             vector: embedding,
@@ -164,15 +142,35 @@ export async function POST(req: Request) {
       }),
     },
     maxSteps: 5,
+    ...(holdForCheck
+      ? {
+          experimental_transform: adviceGuardTransform({
+            rewrite: async (draft) =>
+              (
+                await generateText({
+                  model,
+                  temperature: 0,
+                  system: SYSTEM_PROMPT,
+                  prompt: `QUESTION:\n${latestText}\n\nDRAFT ANSWER:\n${draft}\n\n${REWRITE_INSTRUCTION}`,
+                })
+              ).text,
+            onResult: (event) => {
+              if (event.stage !== 'passed') safeLog('advice_guard', { ...event, viewer: viewer.key });
+            },
+          }),
+        }
+      : {}),
     onFinish: ({ text: answer }) => {
+      // Normal (streamed) answers are monitored after the fact.
       const flags = outputRedFlags(answer);
-      if (flags.length) safeLog('advice_red_flag', { flags, viewer: viewer.key });
+      if (flags.length && !holdForCheck) safeLog('advice_red_flag', { flags, viewer: viewer.key });
     },
   });
 
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { 'Cache-Control': 'no-store' };
   if (latestRedaction?.userNotice) headers['X-Privacy-Notice'] = encodeURIComponent(latestRedaction.userNotice);
   if (quota.remaining !== null) headers['X-Questions-Remaining'] = String(quota.remaining);
+  if (holdForCheck) headers['X-Answer-Check'] = 'held';
 
   return result.toDataStreamResponse({
     headers,
