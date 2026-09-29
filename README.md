@@ -120,3 +120,5 @@ npm run dev                    # http://localhost:3000
 - advice detection;
 - the answer check: safe answers pass, advice is rewritten, failed rewrites fall back, and sources still arrive first (using the AI SDK's mock model);
 - request security: cross-site rejection, body size and type limits, dropping of forged system messages and tool results, history caps and link safety.
+#   I n v e s t m e n t - R e s e a r c h - L i b r a r y  
+ 
