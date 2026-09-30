@@ -518,3 +518,153 @@ a.corpus-entry { text-decoration: none; }
 @media (max-width: 1100px) {
 	.analysis-groups { grid-template-columns: 1fr; }
 }
+
+/* Country and basis labels */
+.basis-label { margin: 0; padding: 9px 12px; border: 1px dashed #c9d3c1; border-radius: 7px; background: rgba(255, 255, 255, 0.6); color: #4b5649; font-size: 11.5px; line-height: 1.55; }
+.basis-label strong { color: var(--ink); }
+.coverage-note { max-width: 60ch; margin: 14px auto 0; padding: 10px 12px; border-left: 2px solid var(--sage); background: #edf0e8; color: #46553f; font-size: 12px; line-height: 1.55; text-align: left; }
+.rail-country .calc-field label { color: var(--muted); font-size: 10px; font-weight: 650; }
+.country-field { margin-bottom: 4px; }
+
+/* Saved plans */
+.saved-plans { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255, 255, 255, 0.7); }
+.saved-plans-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.saved-plans-head h2 { margin: 0; color: var(--ink); font-size: 15px; font-weight: 650; }
+.print-button { width: auto; }
+.saved-plans-save { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.saved-plans-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.saved-plans-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+.saved-plans-list small { color: #8a9185; }
+.saved-plans-actions { display: flex; gap: 12px; }
+.link-button { padding: 0; border: 0; background: none; color: var(--sage-dark); font-size: 12px; font-weight: 650; cursor: pointer; }
+.link-button.is-danger { color: #a54331; }
+
+/* Sources register */
+.sources-table tbody th { white-space: normal; min-width: 260px; }
+.sources-table tr.is-overdue td:last-child { color: #a54331; font-weight: 650; }
+.sources-table tr.is-due-soon td:last-child { color: #8a6411; font-weight: 650; }
+
+/* Print and save as PDF */
+.print-only { display: none; }
+@media print {
+	@page { margin: 14mm; }
+	body { background: #fff; }
+	.site-header, .no-print, .calc-form, .comparison-section, .page-lede { display: none !important; }
+	.print-only { display: block; }
+	.print-header h1 { margin: 0 0 4px; font-family: Georgia, "Palatino Linotype", serif; font-size: 22px; font-weight: 400; }
+	.print-header p { margin: 0 0 10px; color: #555; font-size: 11px; }
+	.page-main { padding: 0; }
+	.page-title { display: none; }
+	.calc-layout.is-household { display: block; }
+	.calc-results { gap: 12px; }
+	.projection-figure, .net-worth-panel, .planner-cashflow, .analysis-group, .milestone-table tr { break-inside: avoid; }
+	.analysis-groups { grid-template-columns: 1fr; }
+	.table-scroll { overflow: visible; }
+}
+
+/* Out-of-date results while a field has a problem */
+.stale-banner { position: sticky; top: 8px; z-index: 5; box-shadow: 0 4px 14px rgba(120, 60, 40, 0.15); }
+.calc-results.is-stale > :not(.stale-banner) { opacity: 0.45; filter: grayscale(0.6); transition: opacity 0.2s; }
+.milestone-table .is-drawn { color: #737a70; }
+
+/* Projector guide */
+.guide-page h3 { margin: 22px 0 6px; color: var(--ink); font-size: 13.5px; font-weight: 650; }
+.guide-back { margin: 0 0 10px; font-size: 12px; }
+.guide-contents { display: flex; flex-wrap: wrap; gap: 8px 14px; margin: -12px 0 8px; font-size: 12px; }
+.guide-contents a { color: var(--sage-dark); font-weight: 650; }
+.guide-table tbody th { min-width: 200px; white-space: normal; }
+.guide-table td { white-space: normal; min-width: 180px; }
+.guide-link { display: inline-flex; align-items: center; gap: 6px; margin-top: -18px; margin-bottom: 26px; color: var(--sage-dark); font-size: 13px; font-weight: 650; }
+.guide-table th, .guide-table td { text-align: left !important; vertical-align: top; }
+.guide-page ul { list-style: disc; }
+.guide-page li { margin-bottom: 4px; }
+
+/* ---------- Responsive: phones, tablets, laptops and large screens ---------- */
+.mobile-settings, .jump-to-results, .jump-to-form { display: none; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+img, svg, canvas, video { max-width: 100%; }
+.table-scroll { -webkit-overflow-scrolling: touch; }
+
+/* Tablets and phones: one column, form first, quick jump to results */
+@media (max-width: 900px) {
+	.calc-layout.is-household { grid-template-columns: 1fr; gap: 20px; }
+	.jump-to-results {
+		position: fixed; right: 14px; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); z-index: 20;
+		display: inline-flex; align-items: center; gap: 6px; padding: 11px 16px; border-radius: 999px;
+		background: var(--sage-dark, #3f4d3b); color: #fff; font-size: 13px; font-weight: 650; text-decoration: none;
+		box-shadow: 0 6px 20px rgba(40, 50, 35, 0.3);
+	}
+	.jump-to-form { display: inline-block; margin-bottom: 4px; color: var(--sage-dark); font-size: 12.5px; font-weight: 650; }
+	.calc-results { scroll-margin-top: 12px; }
+	.analysis-groups { grid-template-columns: 1fr; }
+	.saved-plans-save { grid-template-columns: 1fr; }
+}
+
+/* Phones */
+@media (max-width: 760px) {
+	/* Readable small text */
+	.breadcrumb, .source-count { font-size: 9.5px; }
+	.composer-note { font-size: 10px; line-height: 1.5; }
+	.suggestion-chip { font-size: 12px; }
+	.brand-copy small { font-size: 9px; }
+	.source-meta { font-size: 10.5px; }
+	.asset-editor-note, .calc-field small, .lever-detail { font-size: 11.5px; }
+
+	/* iPhones zoom into fields with text under 16px, so use 16px for everything you type into */
+	input, select, textarea, .composer input, .calc-input input, .planner-select { font-size: 16px !important; }
+
+	/* Country settings under the chat top bar */
+	.mobile-settings { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px 17px 10px; border-bottom: 1px solid var(--line); background: rgba(239, 241, 233, 0.94); }
+	.mobile-settings .calc-field label { font-size: 10.5px; color: var(--muted); font-weight: 650; }
+	.mobile-settings .planner-select { padding: 6px 8px; }
+
+	/* Page menu scrolls sideways on one line instead of splitting words */
+	.site-nav { flex-wrap: nowrap; padding-bottom: 4px; scrollbar-width: none; }
+	.site-nav::-webkit-scrollbar { display: none; }
+	.site-nav a { flex: none; white-space: nowrap; font-size: 13px; padding: 4px 0; }
+
+	/* Headline sizes */
+	.projection-headline { font-size: 20px; line-height: 1.35; }
+	.portfolio-analysis > h2 { font-size: 21px; }
+	.page-lede { font-size: 13.5px; }
+
+	/* Bigger touch targets */
+	.asset-remove { min-width: 40px; min-height: 40px; }
+	.asset-add-button, .plan-button, .link-button { min-height: 40px; }
+	.calc-radios label, .asset-growth-toggle { min-height: 36px; align-items: center; }
+
+	/* Wide tables: show there is more to the right */
+	.table-scroll {
+		background:
+			linear-gradient(to right, var(--paper, #f5f6f0) 30%, rgba(245, 246, 240, 0)),
+			linear-gradient(to left, var(--paper, #f5f6f0) 30%, rgba(245, 246, 240, 0)) 100% 0,
+			radial-gradient(farthest-side at 0 50%, rgba(0, 0, 0, 0.12), transparent),
+			radial-gradient(farthest-side at 100% 50%, rgba(0, 0, 0, 0.12), transparent) 100% 0;
+		background-repeat: no-repeat;
+		background-size: 30px 100%, 30px 100%, 10px 100%, 10px 100%;
+		background-attachment: local, local, scroll, scroll;
+	}
+	.milestone-table th, .milestone-table td { padding: 7px 8px; }
+	.guide-contents { gap: 6px 12px; font-size: 13px; }
+}
+
+/* Small phones */
+@media (max-width: 380px) {
+	.mobile-settings { grid-template-columns: 1fr; }
+	.page-title { font-size: 28px; }
+	.welcome-panel h1 { font-size: 34px; }
+}
+
+/* Large screens: keep line lengths comfortable */
+@media (min-width: 1600px) {
+	.calc-layout.is-household { max-width: 1400px; margin-inline: auto; grid-template-columns: 400px minmax(0, 1fr); }
+}
+@media (max-width: 900px) {
+	.jump-to-results { transition: opacity 0.2s, transform 0.2s; }
+	.jump-to-results.is-hidden { opacity: 0; transform: translateY(12px); pointer-events: none; }
+}
+.current-plan { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 18px; padding: 12px 16px; border: 1px solid var(--sage); border-radius: 8px; background: #fff; }
+.current-plan p { margin: 0; color: #4b5649; font-size: 13.5px; }
+.plan-current-tag { margin: auto 0 0; padding: 9px 12px; border: 1px dashed var(--sage); border-radius: 6px; color: var(--sage-dark); font-size: 12.5px; font-weight: 650; text-align: center; }
+.saved-plans-locked { display: grid; gap: 10px; }
+.saved-plans-locked ul { margin: 0; padding-left: 18px; color: #4b5649; font-size: 12.5px; line-height: 1.7; }

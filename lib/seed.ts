@@ -13,7 +13,9 @@
  *     "title": "IRD - Foreign investment fund rules exemptions",
  *     "url": "https://www.ird.govt.nz/...",
  *     "licence": "cc-by",
- *     "asOf": "2026-09-29"
+ *     "asOf": "2026-09-29",
+ *     "country": "NZ",             (NZ, AU, US, UK, PH, or GLOBAL)
+ *     "reviewEveryMonths": 6       (see /sources for what is due)
  *   }
  *
  * licence is one of: own-content, public-domain, cc-by, permission-granted,
@@ -51,7 +53,7 @@ const ID_PREFIX = 'irl_';
 
 const LICENCES = ['own-content', 'public-domain', 'cc-by', 'permission-granted', 'licensed', 'personal-study-only'] as const;
 type Licence = (typeof LICENCES)[number];
-type ManifestEntry = { title?: string; url?: string; licence: Licence; asOf?: string; publisher?: string };
+type ManifestEntry = { title?: string; url?: string; licence: Licence; asOf?: string; publisher?: string; country?: string; reviewEveryMonths?: number };
 
 type Chunk = {
   text: string;
@@ -61,6 +63,8 @@ type Chunk = {
   collection: CollectionId;
   url: string;
   asOf: string;
+  /** NZ, AU, US, UK, PH, or GLOBAL for documents that apply anywhere. */
+  country: string;
   licence: Licence;
   chunk: number;
 };
@@ -276,6 +280,7 @@ async function loadCorpus(): Promise<{ chunks: Chunk[]; skipped: string[] }> {
           collection,
           url: entry?.url ?? '',
           asOf: entry?.asOf ?? '',
+          country: entry?.country ?? 'GLOBAL',
           licence: entry?.licence ?? 'personal-study-only',
         }),
       );
@@ -340,6 +345,7 @@ async function main() {
       collection: c.collection,
       url: c.url,
       asOf: c.asOf,
+      country: c.country,
       licence: c.licence,
     },
   }));

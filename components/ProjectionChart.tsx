@@ -4,16 +4,19 @@ import {
   Area, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import type { ProjectionResult } from '../lib/finance/projections';
+import { moneyFor, type CountryCode } from '../lib/countries';
 
 export const money = (n: number) =>
   new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD', maximumFractionDigits: 0 }).format(n);
+const moneyNzd = money;
 const compact = (n: number) =>
   new Intl.NumberFormat('en-NZ', { notation: 'compact', maximumFractionDigits: 1 }).format(n);
 
 const COLORS = { line: '#53634f', range: '#c9d3c1', goal: '#c77957', retire: '#737a70', grid: '#e4e7de', tick: '#737a70' };
 
 /** Low–high band, expected line, retirement marker and goal line, in today's dollars. */
-export function ProjectionChart({ result, height = 280 }: { result: ProjectionResult; height?: number }) {
+export function ProjectionChart({ result, height = 280, country }: { result: ProjectionResult; height?: number; country?: CountryCode }) {
+  const money = country ? moneyFor(country) : moneyNzd;
   const [low, base, high] = result.scenarios;
   const data = base.series.map((p, k) => ({
     age: p.age,
@@ -58,20 +61,21 @@ export function ProjectionChart({ result, height = 280 }: { result: ProjectionRe
         </ResponsiveContainer>
       </div>
       <figcaption>
-        Today&apos;s dollars. Shaded band: returns {low.netReturnPct}% to {high.netReturnPct}% a year after fees; line: {base.netReturnPct}%.
+        Today&apos;s money. Shaded band: returns {low.netReturnPct}% to {high.netReturnPct}% a year after fees; line: {base.netReturnPct}%.
       </figcaption>
     </figure>
   );
 }
 
 /** Milestone table: balances at ages 55/60/65/70 for each scenario. */
-export function MilestoneTable({ result }: { result: ProjectionResult }) {
+export function MilestoneTable({ result, country }: { result: ProjectionResult; country?: CountryCode }) {
+  const money = country ? moneyFor(country) : moneyNzd;
   if (!result.milestones.length) return null;
   const [low, base, high] = result.scenarios;
   return (
     <div className="table-scroll">
       <table className="milestone-table">
-        <caption>Balance at each age, in today&apos;s dollars</caption>
+        <caption>Balance at each age, in today&apos;s money</caption>
         <thead>
           <tr>
             <th scope="col">Age</th>

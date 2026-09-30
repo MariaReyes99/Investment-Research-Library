@@ -1,10 +1,10 @@
 /**
- * Plans, daily question limits and burst limits.
+ * Plans, monthly question allowances (30-day windows) and burst limits.
  *
  * Tiers, from the bottom up:
- *  - anonymous visitors (not signed in): ANONYMOUS_DAILY_QUESTIONS a day, by hashed IP
- *  - free accounts: PLANS.free.dailyQuestions a day
- *  - paid plans: their own daily allowance
+ *  - anonymous visitors (not signed in): ANONYMOUS_MONTHLY_QUESTIONS a month, by hashed IP
+ *  - free accounts: PLANS.free.monthlyQuestions a month
+ *  - paid plans: their own monthly allowance
  * When someone runs out, the chat shows a sign-in or upgrade panel.
  *
  * Counts are stored in Upstash Redis (a separate database from Upstash Vector).
@@ -19,7 +19,7 @@
  */
 import { Redis } from '@upstash/redis';
 import { Ratelimit } from '@upstash/ratelimit';
-import { ANONYMOUS_DAILY_QUESTIONS, PLANS, type Plan } from './plans';
+import { ANONYMOUS_MONTHLY_QUESTIONS, PLANS, type Plan } from './plans';
 import { clerkEnabled } from './viewer';
 
 export { PLANS, planFrom, type Plan } from './plans';
@@ -37,16 +37,16 @@ export function tierFor(plan: Plan, signedIn: boolean): Tier {
   return !signedIn && clerkEnabled ? 'anonymous' : plan;
 }
 
-export function dailyLimit(tier: Tier): number {
-  return tier === 'anonymous' ? ANONYMOUS_DAILY_QUESTIONS : PLANS[tier].dailyQuestions;
+export function monthlyLimit(tier: Tier): number {
+  return tier === 'anonymous' ? ANONYMOUS_MONTHLY_QUESTIONS : PLANS[tier].monthlyQuestions;
 }
 
 const TIERS: Tier[] = ['anonymous', ...(Object.keys(PLANS) as Plan[])];
 const limiters = redis
   ? (Object.fromEntries(
-      TIERS.filter((t) => dailyLimit(t) > 0).map((t) => [
+      TIERS.filter((t) => monthlyLimit(t) > 0).map((t) => [
         t,
-        new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(dailyLimit(t), '1 d'), prefix: `irl:q:${t}` }),
+        new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(monthlyLimit(t), '30 d'), prefix: `irl:m:${t}` }),
       ]),
     ) as Partial<Record<Tier, Ratelimit>>)
   : null;
@@ -61,9 +61,11 @@ export type QuotaResult = {
   limit?: number;
   reason?: string;
   notConfigured?: boolean;
-  /** The daily allowance is used up (as opposed to the burst limit or an outage). */
+  /** The monthly allowance is used up (as opposed to the burst limit or an outage). */
   limitReached?: boolean;
   tier?: Tier;
+  /** When the allowance resets (ms since epoch). */
+  reset?: number;
 };
 
 const NOT_CONFIGURED: QuotaResult = {
@@ -73,19 +75,22 @@ const NOT_CONFIGURED: QuotaResult = {
   reason: "The library isn't accepting questions yet. (Site owner: set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN.)",
 };
 
-function limitMessage(tier: Tier): string {
+const resetText = (reset?: number) =>
+  reset ? ` It resets on ${new Date(reset).toLocaleDateString('en-NZ', { day: 'numeric', month: 'long' })}.` : '';
+
+function limitMessage(tier: Tier, reset?: number): string {
   if (tier === 'anonymous') {
-    return `You've used today's ${ANONYMOUS_DAILY_QUESTIONS} questions for visitors. Sign in for ${PLANS.free.dailyQuestions} free questions a day, or choose a plan for more.`;
+    return `You've used the ${ANONYMOUS_MONTHLY_QUESTIONS} questions for visitors this month. Sign in for ${PLANS.free.monthlyQuestions} free questions a month, or choose a plan for more.`;
   }
   if (tier === 'free') {
-    return `You've used today's ${PLANS.free.dailyQuestions} free questions. Choose a plan to keep asking, or come back tomorrow.`;
+    return `You've used this month's ${PLANS.free.monthlyQuestions} free questions. Choose a plan to keep asking.${resetText(reset)}`;
   }
-  return "You've reached today's fair-use limit. It resets within 24 hours.";
+  return `You've used this month's ${PLANS[tier].monthlyQuestions} questions on the ${PLANS[tier].label} plan.${resetText(reset)}`;
 }
 
 export async function checkQuota(viewerKey: string, plan: Plan, signedIn: boolean): Promise<QuotaResult> {
   const tier = tierFor(plan, signedIn);
-  const limit = dailyLimit(tier);
+  const limit = monthlyLimit(tier);
   if (!limitsActive) return { allowed: true, remaining: null, tier, limit };
   if (!limiters || !burst) return NOT_CONFIGURED;
   const limiter = limiters[tier];
@@ -94,8 +99,8 @@ export async function checkQuota(viewerKey: string, plan: Plan, signedIn: boolea
     const b = await burst.limit(viewerKey);
     if (!b.success) return { allowed: false, remaining: null, tier, reason: 'Too many questions in a short time. Wait a minute and try again.' };
     const r = await limiter.limit(viewerKey);
-    if (r.success) return { allowed: true, remaining: r.remaining, limit, tier };
-    return { allowed: false, remaining: 0, limit, tier, limitReached: true, reason: limitMessage(tier) };
+    if (r.success) return { allowed: true, remaining: r.remaining, limit, tier, reset: r.reset };
+    return { allowed: false, remaining: 0, limit, tier, limitReached: true, reset: r.reset, reason: limitMessage(tier, r.reset) };
   } catch {
     return {
       allowed: false,
@@ -106,18 +111,18 @@ export async function checkQuota(viewerKey: string, plan: Plan, signedIn: boolea
   }
 }
 
-export type Usage = { tier: Tier; limit: number; remaining: number | null; limitsActive: boolean };
+export type Usage = { tier: Tier; limit: number; remaining: number | null; limitsActive: boolean; reset?: number };
 
-/** How many questions are left today, without using one up. */
+/** How many questions are left this month, without using one up. */
 export async function getUsage(viewerKey: string, plan: Plan, signedIn: boolean): Promise<Usage> {
   const tier = tierFor(plan, signedIn);
-  const limit = dailyLimit(tier);
+  const limit = monthlyLimit(tier);
   if (!limitsActive || !limiters) return { tier, limit, remaining: null, limitsActive };
   const limiter = limiters[tier];
   if (!limiter) return { tier, limit, remaining: 0, limitsActive };
   try {
     const r = await limiter.getRemaining(viewerKey);
-    return { tier, limit, remaining: Math.max(0, r.remaining), limitsActive };
+    return { tier, limit, remaining: Math.max(0, r.remaining), limitsActive, reset: r.reset };
   } catch {
     return { tier, limit, remaining: null, limitsActive };
   }

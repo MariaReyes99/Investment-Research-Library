@@ -95,19 +95,29 @@ const IncomingSchema = z.object({
 
 export type CleanMessage = { role: 'user' | 'assistant'; content: string };
 
+/** How many earlier projections to carry into follow-up questions. */
+const PROJECTIONS_KEPT = 2;
+
 /**
  * Rebuild the conversation from scratch. Anything not on the allowlist is
  * dropped: system/data/tool roles, toolInvocations, parts, attachments, ids.
  */
-export function sanitizeChatMessages(body: unknown): { ok: true; messages: CleanMessage[] } | Rejection {
+export function sanitizeChatMessages(
+  body: unknown,
+  /** Describes tool results on an assistant message (for example the projection inputs), so follow-ups can refer back. */
+  describeTools?: (toolInvocations: unknown) => string,
+): { ok: true; messages: CleanMessage[] } | Rejection {
   const parsed = IncomingSchema.safeParse(body);
   if (!parsed.success) return reject(400, 'Request must include a messages array (at most 100 messages).');
 
   const cleaned: CleanMessage[] = [];
+  const notes: { index: number; note: string }[] = [];
   for (const m of parsed.data.messages) {
     if ((m.role !== 'user' && m.role !== 'assistant') || typeof m.content !== 'string') continue;
     const content = m.content.replace(/\u0000/g, '').trim();
-    if (!content) continue;
+    const note = m.role === 'assistant' && describeTools ? describeTools((m as { toolInvocations?: unknown }).toolInvocations) : '';
+    if (!content && !note) continue;
+    if (note) notes.push({ index: cleaned.length, note });
     if (m.role === 'user' && content.length > CHAT_LIMITS.maxUserChars) {
       return reject(413, `Please keep questions under ${CHAT_LIMITS.maxUserChars} characters.`);
     }
@@ -116,6 +126,8 @@ export function sanitizeChatMessages(body: unknown): { ok: true; messages: Clean
       content: m.role === 'assistant' ? content.slice(0, CHAT_LIMITS.maxAssistantChars) : content,
     });
   }
+  // Attach only the most recent projections, to keep the request small
+  for (const { index, note } of notes.slice(-PROJECTIONS_KEPT)) cleaned[index].content += note;
 
   let recent = cleaned.slice(-CHAT_LIMITS.maxHistory);
   const firstUser = recent.findIndex((m) => m.role === 'user');

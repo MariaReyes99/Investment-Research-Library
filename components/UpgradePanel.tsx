@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { SignInButton } from '@clerk/nextjs';
 import UpgradeButton from './UpgradeButton';
-import { ANONYMOUS_DAILY_QUESTIONS, PAID_PLANS, PLANS } from '../lib/plans';
+import { ANONYMOUS_MONTHLY_QUESTIONS, PAID_PLANS, PLANS } from '../lib/plans';
 
 export type LimitTier = 'anonymous' | 'free' | 'basic' | 'premium' | 'pro';
 
@@ -16,7 +16,7 @@ function PlanChoices({ signedIn }: { signedIn: boolean }) {
         <section className="upgrade-plan" key={id} aria-labelledby={`upgrade-${id}`}>
           <h3 id={`upgrade-${id}`}>{PLANS[id].label}</h3>
           <p><strong>${PLANS[id].priceNzd}</strong> a month</p>
-          <p>{PLANS[id].features[0]}</p>
+          {PLANS[id].features.slice(0, 2).map((f) => <p key={f}>{f}</p>)}
           {signedIn ? (
             <UpgradeButton plan={id} label={`Choose ${PLANS[id].label}`} />
           ) : (
@@ -28,15 +28,15 @@ function PlanChoices({ signedIn }: { signedIn: boolean }) {
   );
 }
 
-/** Shown in place of the composer once today's questions are used. */
+/** Shown in place of the composer once this month's questions are used. */
 export default function UpgradePanel({ tier }: { tier: LimitTier }) {
   if (tier === 'anonymous') {
     return (
       <section className="upgrade-panel" aria-labelledby="upgrade-title">
         <h2 id="upgrade-title">Sign in to keep asking</h2>
         <p>
-          You&apos;ve used today&apos;s {ANONYMOUS_DAILY_QUESTIONS} questions for visitors. A free account gives you{' '}
-          {PLANS.free.dailyQuestions} questions a day. Paid plans give you more.
+          You&apos;ve used the {ANONYMOUS_MONTHLY_QUESTIONS} questions for visitors this month. A free account gives you{' '}
+          {PLANS.free.monthlyQuestions} questions a month. Paid plans give you more.
         </p>
         {clerkEnabled && (
           <SignInButton mode="modal">
@@ -51,10 +51,10 @@ export default function UpgradePanel({ tier }: { tier: LimitTier }) {
   if (tier === 'free') {
     return (
       <section className="upgrade-panel" aria-labelledby="upgrade-title">
-        <h2 id="upgrade-title">You&apos;ve used today&apos;s free questions</h2>
+        <h2 id="upgrade-title">You&apos;ve used this month&apos;s free questions</h2>
         <p>
-          The free plan includes {PLANS.free.dailyQuestions} questions a day. Choose a plan to keep asking now, or come back
-          tomorrow. You can cancel at any time.
+          The free plan includes {PLANS.free.monthlyQuestions} questions a month. Choose a plan to keep asking now. You can
+          cancel at any time and keep your plan until the end of the month you&apos;ve paid for.
         </p>
         <PlanChoices signedIn />
         <small>Payments are handled by Stripe. We never see your card details. <Link href="/pricing">Compare plans</Link></small>
@@ -63,8 +63,8 @@ export default function UpgradePanel({ tier }: { tier: LimitTier }) {
   }
   return (
     <section className="upgrade-panel" aria-labelledby="upgrade-title">
-      <h2 id="upgrade-title">You&apos;ve reached today&apos;s fair-use limit</h2>
-      <p>Your {PLANS[tier].label} plan resets within 24 hours.{tier !== 'pro' && ' A higher plan gives you more questions each day.'}</p>
+      <h2 id="upgrade-title">You&apos;ve used this month&apos;s questions</h2>
+      <p>Your {PLANS[tier].label} plan includes {PLANS[tier].monthlyQuestions} questions a month, and resets 30 days after your allowance started.{tier !== 'pro' && ' A higher plan gives you more questions each month.'}</p>
       {tier !== 'pro' && <Link className="plan-button is-secondary" href="/pricing">Compare plans</Link>}
     </section>
   );

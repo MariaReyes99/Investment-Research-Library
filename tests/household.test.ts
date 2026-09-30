@@ -167,3 +167,160 @@ test('analysis: a debt-free household with a pension shows those strengths', () 
   assert.ok(a.strengths.some((f) => f.title === 'Low fees'));
   assert.ok(!a.weaknesses.some((f) => f.title === 'No pension included'));
 });
+
+import { householdFromSimple } from '../lib/finance/fromSimple';
+
+test('events: an inheritance adds money and selling a property turns equity into savings', () => {
+  const r = projectHousehold({
+    you: { currentAge: 60, retirementAge: 70 },
+    endAge: 63,
+    inflationPct: 0,
+    surplusReturnPct: 0,
+    properties: [{ name: 'Rental', value: 500_000, growthPct: 0, mortgageBalance: 100_000, mortgageRatePct: 0, monthlyRepayment: 0 }],
+    events: [
+      { name: 'Inheritance', kind: 'money_in', atAge: 61, amount: 50_000 },
+      { name: 'Sell rental', kind: 'sell_property', atAge: 62, propertyName: 'Rental', sellingCostsPct: 2 },
+    ],
+  }, { monteCarlo: false });
+  const s = r.scenarios[1].series;
+  near(s[1].liquid, 0, 0.01);
+  near(s[2].liquid, 50_000, 0.01);
+  near(s[3].liquid, 50_000 + 500_000 * 0.98 - 100_000, 0.01);
+  near(s[3].property, 0, 0.01);
+});
+
+test('tax: withdrawals from a taxed-on-withdrawal account are grossed up', () => {
+  const r = projectHousehold({
+    country: 'US',
+    you: { currentAge: 65, retirementAge: 65 },
+    endAge: 66,
+    inflationPct: 0,
+    investments: [{ name: '401(k)', kind: 'retirement_account', balance: 100_000, returnPct: 0, taxTreatment: 'taxed_on_withdrawal', taxRatePct: 20 }],
+    livingExpensesMonthly: 800,
+  }, { monteCarlo: false });
+  const end = r.scenarios[1].series[1];
+  near(end.tax, 800 * 12 * 0.25, 0.5); // 9,600 net needs 12,000 gross at 20%
+  near(end.investments, 100_000 - 12_000, 0.5);
+});
+
+test('tax: yearly tax reduces growth', () => {
+  const r = projectHousehold({
+    you: { currentAge: 40, retirementAge: 70 }, endAge: 41, inflationPct: 0,
+    investments: [{ name: 'Fund', balance: 100_000, returnPct: 10, taxTreatment: 'taxed_yearly', taxRatePct: 30 }],
+  }, { monteCarlo: false });
+  near(r.scenarios[1].series[1].investments, 107_000, 1);
+});
+
+test('countries: US retirement accounts open at 59.5 and pensions start at 67', () => {
+  const r = projectHousehold({
+    country: 'US',
+    you: { currentAge: 58, retirementAge: 58 },
+    endAge: 68,
+    inflationPct: 0,
+    investments: [{ name: 'IRA', kind: 'retirement_account', balance: 50_000, returnPct: 0 }],
+    incomes: [{ name: 'Social Security', kind: 'pension', monthlyAmount: 1_000 }],
+    livingExpensesMonthly: 100,
+  }, { monteCarlo: false });
+  const s = r.scenarios[1].series;
+  assert.equal(r.scenarios[1].shortfallAge, 58); // nothing accessible before 59.5
+  near(s[8].income, 0, 0.01); // age 65-66
+  near(s[10].income, 12_000, 0.01); // age 67-68
+});
+
+test('withdrawal strategies: percent spends a share of savings; guardrails avoids running out', () => {
+  const base: HouseholdInput = {
+    you: { currentAge: 65, retirementAge: 65 }, endAge: 95, inflationPct: 0,
+    investments: [{ name: 'Fund', balance: 500_000, returnPct: 3 }],
+    livingExpensesMonthly: 3_000,
+  };
+  const needs = projectHousehold(base, { monteCarlo: false });
+  const pct = projectHousehold({ ...base, withdrawal: { strategy: 'percent', ratePct: 4 } }, { monteCarlo: false });
+  const guard = projectHousehold({ ...base, withdrawal: { strategy: 'guardrails' } }, { monteCarlo: false });
+  assert.ok(needs.scenarios[1].shortfallAge !== null);
+  near(pct.scenarios[1].series[1].spending, 20_000, 1);
+  assert.equal(pct.scenarios[1].shortfallAge, null);
+  assert.ok(guard.scenarios[1].shortfallAge === null || guard.scenarios[1].shortfallAge > needs.scenarios[1].shortfallAge!);
+});
+
+test('monte carlo: is repeatable and reports a success rate', () => {
+  const a = projectHousehold(EXAMPLE).monteCarlo;
+  const b = projectHousehold(EXAMPLE).monteCarlo;
+  assert.equal(a.successRate, b.successRate);
+  assert.ok(a.successRate >= 0 && a.successRate <= 1);
+  assert.ok(a.byAge.length > 0);
+});
+
+test('simple projections convert to a household with contributions paid from outside income', () => {
+  const h = householdFromSimple({ currentAge: 52, retirementAge: 65, currentSavings: 500_000, monthlyContribution: 2_000, expectedReturnPct: 5, goal: { desiredAnnualIncome: 60_000 } });
+  const r = projectHousehold(h, { monteCarlo: false });
+  const s = r.scenarios[1].series;
+  assert.ok(s[1].liquid > 500_000, 'contributions should add to savings, not be drawn from them');
+  near(r.scenarios[1].series.find((p) => p.age === 66)!.spending, 60_000, 1);
+});
+
+test('simple projections always get strengths, weaknesses, risks and levers', () => {
+  const a = analyseHousehold(projectHousehold(householdFromSimple(
+    { currentAge: 52, retirementAge: 65, currentSavings: 500_000, monthlyContribution: 2_000, expectedReturnPct: 5, feesPct: 0.5, goal: { desiredAnnualIncome: 60_000 } },
+    'NZ',
+  )));
+  assert.ok(a.strengths.length + a.weaknesses.length > 0);
+  assert.ok(a.risks.length > 0);
+  assert.ok(a.levers.length > 0);
+});
+
+import { currencyCountryIn } from '../lib/countries';
+
+test('currency in a question is detected so projections use the right country', () => {
+  assert.equal(currencyCountryIn("I'm 52 with NZD 500,000 and add $2,000 a month"), 'NZ');
+  assert.equal(currencyCountryIn('I have ₱2,000,000 in PERA'), 'PH');
+  assert.equal(currencyCountryIn('£300k in my SIPP'), 'UK');
+  assert.equal(currencyCountryIn('I have 500,000 saved'), null);
+  assert.equal(currencyCountryIn('NZD 100k and USD 50k'), null);
+});
+
+test('currencies: foreign items are converted to the home currency', () => {
+  const r = projectHousehold({
+    country: 'NZ',
+    you: { currentAge: 40, retirementAge: 70 }, endAge: 41, inflationPct: 0, surplusReturnPct: 0,
+    fx: [{ currency: 'PHP', rate: 0.03 }],
+    properties: [{ name: 'House in Cebu', value: 5_000_000, growthPct: 0, currency: 'PHP' }],
+    incomes: [{ name: 'Pay', kind: 'salary', monthlyAmount: 5_000 }],
+    dependants: [{ name: 'Parents', kind: 'parent', monthlyCost: 20_000, years: 10, currency: 'PHP' }],
+  }, { monteCarlo: false });
+  near(r.today.assets, 150_000, 0.01);
+  near(r.today.monthlySurplus, 5_000 - 600, 0.01);
+  near(r.scenarios[1].series[1].liquid, 4_400 * 12, 0.01);
+});
+
+test('currencies: a missing exchange rate is reported clearly', () => {
+  assert.throws(
+    () => projectHousehold({ you: { currentAge: 40, retirementAge: 65 }, investments: [{ name: 'PH fund', balance: 1, returnPct: 5, currency: 'PHP' }] }),
+    /Add an exchange rate for PHP/,
+  );
+});
+
+test('currencies: a falling foreign currency lowers its home value; retiring abroad uses that currency', () => {
+  const r = projectHousehold({
+    country: 'NZ', retireIn: 'PH',
+    you: { currentAge: 64, retirementAge: 65 }, endAge: 67, inflationPct: 0, surplusReturnPct: 0,
+    fx: [{ currency: 'PHP', rate: 0.03, yearlyChangePct: -10 }],
+    cashOnHand: 100_000,
+    otherAssets: [{ name: 'Land', value: 1_000_000, changePct: 0, currency: 'PHP' }],
+    retirementLivingExpensesMonthly: 50_000,
+  }, { monteCarlo: false });
+  const s = r.scenarios[1].series;
+  near(s[1].otherAssets, 30_000 * 0.9, 0.01);
+  near(s[2].spending, 50_000 * 12 * 0.03 * Math.pow(0.9, 1.5), 400); // roughly, PHP costs converted each month
+});
+
+test('currencies: pensions and accounts follow the country of their currency', () => {
+  const r = projectHousehold({
+    country: 'NZ',
+    you: { currentAge: 58, retirementAge: 58 }, endAge: 62, inflationPct: 0,
+    fx: [{ currency: 'PHP', rate: 0.03 }],
+    incomes: [{ name: 'SSS pension', kind: 'pension', monthlyAmount: 10_000, currency: 'PHP' }],
+  }, { monteCarlo: false });
+  const s = r.scenarios[1].series;
+  near(s[1].income, 0, 0.01); // 58-59
+  near(s[3].income, 10_000 * 12 * 0.03, 0.01); // 60-61: SSS starts at 60, NZ Super would be 65
+});

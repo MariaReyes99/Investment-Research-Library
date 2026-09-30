@@ -8,7 +8,7 @@
  *  2. Privacy: personal details are removed from every user message before the
  *     model, search or logs see them. Payment card data blocks the request
  *     entirely (422) and is never processed or stored.
- *  3. Quota: daily question limit by plan, plus a per-minute burst limit.
+ *  3. Quota: monthly question allowance by plan, plus a per-minute burst limit.
  *  4. Answer. The model can call getInformation (library search),
  *     projectWealth (one savings pot) and projectHousehold (a whole household:
  *     several assets, properties, incomes and expenses). The model never does maths.
@@ -17,7 +17,7 @@
  *       held back, checked, rewritten once if needed, or replaced with a safe
  *       fallback before the reader sees it. Sources and charts still stream.
  */
-import { streamText, generateText, tool, embed } from 'ai';
+import { streamText, generateText, tool, embed, jsonSchema, zodSchema } from 'ai';
 import { Index } from '@upstash/vector';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
@@ -27,6 +27,7 @@ import { redactPII, safeLog, type RedactionResult } from '../../../lib/guardrail
 import {
   SYSTEM_PROMPT,
   PERSONAL_ADVICE_STEER,
+  countryContext,
   REWRITE_INSTRUCTION,
   isPersonalAdviceRequest,
   outputRedFlags,
@@ -35,6 +36,11 @@ import { adviceGuardTransform } from '../../../lib/guardrails/adviceGuard';
 import { projectWealth, summariseProjection, ProjectionInputSchema } from '../../../lib/finance/projections';
 import { HouseholdInputSchema, projectHousehold, summariseHousehold } from '../../../lib/finance/household';
 import { analyseHousehold, summariseAnalysis } from '../../../lib/finance/householdAnalysis';
+import { householdFromSimple } from '../../../lib/finance/fromSimple';
+import { projectionNote } from '../../../lib/chatContext';
+import { DEFAULT_COUNTRY, currencyCountryIn, isCountry } from '../../../lib/countries';
+import { fetchRates, isCurrency } from '../../../lib/fxRates';
+import { CURRENCIES } from '../../../lib/finance/household';
 import { checkQuota } from '../../../lib/entitlements';
 import { getViewer } from '../../../lib/viewer';
 import { assertSameOrigin, readJsonBody, sanitizeChatMessages, CHAT_LIMITS } from '../../../lib/security';
@@ -50,6 +56,28 @@ const MIN_SCORE = 0.3;
 const text = (body: string, status: number) =>
   new Response(body, { status, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });
 
+/**
+ * Tool inputs are checked inside the tool, not by the AI SDK. If the model
+ * passes something out of range (say a 30% yearly return), the tool tells it
+ * what was wrong so it can explain and try again, instead of the whole answer
+ * failing with an error.
+ */
+function checkedLater<T extends z.ZodTypeAny>(schema: T) {
+  return jsonSchema<z.input<T>>(zodSchema(schema).jsonSchema);
+}
+
+function describeIssues(err: z.ZodError): string {
+  return err.issues.slice(0, 5).map((i) => {
+    const where = i.path.join('.') || 'input';
+    if (i.code === 'too_big') return `${where} must be at most ${String(i.maximum)}`;
+    if (i.code === 'too_small') return `${where} must be at least ${String(i.minimum)}`;
+    return `${where}: ${i.message}`;
+  }).join('; ');
+}
+
+const OUT_OF_RANGE_HELP =
+  'Fix the inputs and call the tool again. Yearly returns are limited to 20% because no investment strategy reliably earns more over the long run; if the user asked for a higher return, explain that plainly and use realistic returns such as 4% (conservative), 6% (balanced) and 8% (growth).';
+
 export async function POST(req: Request) {
   // 1. Security
   const crossSite = assertSameOrigin(req);
@@ -58,7 +86,11 @@ export async function POST(req: Request) {
   const body = await readJsonBody(req, CHAT_LIMITS.maxBodyBytes);
   if (!body.ok) return text(body.message, body.status);
 
-  const cleaned = sanitizeChatMessages(body.data);
+  const cleaned = sanitizeChatMessages(body.data, projectionNote);
+  const requestedCountry = (body.data as { country?: unknown } | null)?.country;
+  const country = isCountry(requestedCountry) ? requestedCountry : DEFAULT_COUNTRY;
+  const requestedRetireIn = (body.data as { retireIn?: unknown } | null)?.retireIn;
+  const retireIn = isCountry(requestedRetireIn) && requestedRetireIn !== country ? requestedRetireIn : null;
   if (!cleaned.ok) return text(cleaned.message, cleaned.status);
 
   // 2. Privacy: redact every user turn; card data in the latest one blocks the request
@@ -91,7 +123,8 @@ export async function POST(req: Request) {
 
   const latestText = messages[messages.length - 1].content;
   const holdForCheck = isPersonalAdviceRequest(latestText);
-  const system = holdForCheck ? `${SYSTEM_PROMPT}\n\n${PERSONAL_ADVICE_STEER}` : SYSTEM_PROMPT;
+  const amountsIn = currencyCountryIn(latestText);
+  const system = [SYSTEM_PROMPT, countryContext(country, amountsIn, retireIn), holdForCheck ? PERSONAL_ADVICE_STEER : ''].filter(Boolean).join('\n\n');
 
   // An anonymous, hashed id lets OpenAI trace abuse without any personal details.
   const openaiUser = createHash('sha256').update(`openai:${viewer.key}`).digest('hex').slice(0, 32);
@@ -112,15 +145,33 @@ export async function POST(req: Request) {
           query: z.string().max(500).describe('the topic, term, or sub-question to search for'),
         }),
         execute: async ({ query }) => {
-          const { embedding } = await embed({
-            model: openai.embedding(process.env.EMBEDDING_MODEL ?? 'text-embedding-3-small', { user: openaiUser }),
-            value: redactPII(query).clean,
-          });
-          const hits = await index.query({
-            vector: embedding,
-            topK: TOP_K,
-            includeMetadata: true,
-          });
+          // A failed search returns no passages instead of breaking the whole answer.
+          let hits: Awaited<ReturnType<typeof index.query>> = [];
+          try {
+            const { embedding } = await embed({
+              model: openai.embedding(process.env.EMBEDDING_MODEL ?? 'text-embedding-3-small', { user: openaiUser }),
+              value: redactPII(query).clean,
+            });
+            // Only this country's documents plus general ones. Chunks seeded before
+            // country tags existed have no country and are kept as a fallback.
+            try {
+              hits = await index.query({
+                vector: embedding,
+                topK: TOP_K,
+                includeMetadata: true,
+                filter: `country = '${country}' OR country = 'GLOBAL'`,
+              });
+            } catch (err) {
+              safeLog('search_filter_error', { message: err instanceof Error ? err.message : String(err) });
+            }
+            if (!hits.length) {
+              hits = (await index.query({ vector: embedding, topK: TOP_K, includeMetadata: true }))
+                .filter((h) => h.metadata?.country === undefined || h.metadata?.country === country || h.metadata?.country === 'GLOBAL');
+            }
+          } catch (err) {
+            safeLog('search_error', { message: err instanceof Error ? err.message : String(err) });
+            return [];
+          }
           return hits
             .filter((h) => h.score >= MIN_SCORE)
             .map((h) => ({
@@ -131,6 +182,7 @@ export async function POST(req: Request) {
               collection: (h.metadata?.collection as string) ?? '',
               url: (h.metadata?.url as string) ?? '',
               asOf: (h.metadata?.asOf as string) ?? '',
+              country: (h.metadata?.country as string) ?? '',
               score: h.score,
             }));
         },
@@ -138,24 +190,44 @@ export async function POST(req: Request) {
       projectWealth: tool({
         description:
           "Project future wealth from age, current savings, monthly contributions, expected return, fees and inflation, with an optional goal (a target balance or a yearly retirement income, both in today's dollars). Returns Low/Expected/High scenarios, balances at ages 55/60/65/70, sustainable retirement income, and progress towards the goal.",
-        parameters: ProjectionInputSchema,
-        execute: async (input) => {
+        parameters: checkedLater(ProjectionInputSchema),
+        execute: async (raw) => {
+          const checked = ProjectionInputSchema.safeParse(raw);
+          if (!checked.success) return { ok: false as const, error: `${describeIssues(checked.error)}. ${OUT_OF_RANGE_HELP}` };
+          const input = checked.data;
           try {
             // The model gets a compact summary; the browser redraws the full
             // chart from the same inputs, so yearly series never cost tokens.
-            return { ok: true as const, ...summariseProjection(projectWealth(input)) };
+            const analysis = summariseAnalysis(analyseHousehold(projectHousehold(householdFromSimple(input, input.country ?? amountsIn ?? country), { monteCarlo: false })));
+            return { ok: true as const, ...summariseProjection(projectWealth(input)), country, analysis };
           } catch (e) {
             return { ok: false as const, error: e instanceof Error ? e.message : 'Invalid inputs' };
           }
         },
       }),
+      getExchangeRates: tool({
+        description:
+          "Today's exchange rates (European Central Bank reference rates via Frankfurter). Call it before projectHousehold whenever the plan uses more than one currency, and put the results in projectHousehold's fx list.",
+        parameters: z.object({
+          home: z.enum(CURRENCIES).describe('Currency of the country the user lives in'),
+          currencies: z.array(z.enum(CURRENCIES)).min(1).max(4).describe('The other currencies in the plan'),
+        }),
+        execute: async ({ home, currencies }) => {
+          const quote = await fetchRates(home, currencies.filter(isCurrency));
+          return quote
+            ? { ok: true as const, date: quote.date, source: quote.source, valueOfOneUnitIn: { currency: home, ...quote.perUnit } }
+            : { ok: false as const, error: "Rates couldn't be fetched. Ask the user for the rate or use a clearly labelled rough rate." };
+        },
+      }),
       projectHousehold: tool({
         description:
           "Project a whole household in one run: one person or a couple, cash, several investments (KiwiSaver, shares, funds), properties with their mortgages, other assets and debts, incomes (salary, dividends, rent, pensions such as NZ Super) and expenses (living costs, children, parents, pets, other). Monthly surplus is reinvested and shortfalls are drawn from savings. Optionally compares several return assumptions side by side. Returns net worth at each age in today's dollars, when money runs out, goal progress, warnings, and a portfolio analysis (strengths, weaknesses, risks, and measured levers to explore).",
-        parameters: HouseholdInputSchema,
-        execute: async (input) => {
+        parameters: checkedLater(HouseholdInputSchema),
+        execute: async (raw) => {
+          const checked = HouseholdInputSchema.safeParse(raw);
+          if (!checked.success) return { ok: false as const, error: `${describeIssues(checked.error)}. ${OUT_OF_RANGE_HELP}` };
           try {
-            const projection = projectHousehold(input);
+            const projection = projectHousehold(checked.data);
             return { ok: true as const, ...summariseHousehold(projection), analysis: summariseAnalysis(analyseHousehold(projection)) };
           } catch (e) {
             return { ok: false as const, error: e instanceof Error ? e.message : 'Invalid inputs' };
@@ -199,8 +271,11 @@ export async function POST(req: Request) {
   return result.toDataStreamResponse({
     headers,
     getErrorMessage: (error) => {
-      safeLog('chat_error', { message: error instanceof Error ? error.message : String(error) });
-      return 'Sorry, something went wrong while answering. Please try again in a moment.';
+      const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+      safeLog('chat_error', { message: detail });
+      // On your own computer, show the real reason to make problems easy to fix.
+      const dev = process.env.NODE_ENV !== 'production';
+      return `Sorry, something went wrong while answering. Please try again in a moment.${dev ? ` (Details for the developer: ${detail.slice(0, 300)})` : ''}`;
     },
   });
 }

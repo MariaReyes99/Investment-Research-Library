@@ -4,119 +4,153 @@
     "url": "https://www.ird.govt.nz/income-tax/income-tax-for-businesses-and-organisations/types-of-business-income/foreign-investment-funds-fifs/foreign-investment-fund-rules-exemptions",
     "licence": "own-content",
     "publisher": "Investment Research Library",
-    "asOf": "2026-09-29"
+    "asOf": "2026-09-29",
+    "country": "NZ",
+    "reviewEveryMonths": 6
   },
   "KiwiSaver_Guides/kiwisaver-basics.md": {
     "title": "KiwiSaver basics (as at September 2026)",
     "url": "https://www.ird.govt.nz/kiwisaver",
     "licence": "own-content",
     "publisher": "Investment Research Library",
-    "asOf": "2026-09-29"
+    "asOf": "2026-09-29",
+    "country": "NZ",
+    "reviewEveryMonths": 6
   },
   "KiwiSaver_Guides/kiwisaver-changes-2026.md": {
     "title": "KiwiSaver contribution changes from 2026",
     "url": "https://www.ird.govt.nz/updates/news-folder/2025/kiwisaver-changes",
     "licence": "own-content",
     "publisher": "Investment Research Library",
-    "asOf": "2026-09-29"
+    "asOf": "2026-09-29",
+    "country": "NZ",
+    "reviewEveryMonths": 3
   },
   "KiwiSaver_Guides/comparing-kiwisaver-funds.md": {
     "title": "Comparing KiwiSaver funds and providers",
     "url": "https://www.smartinvestor.sorted.org.nz/kiwisaver-and-managed-funds/",
     "licence": "own-content",
     "publisher": "Investment Research Library",
-    "asOf": "2026-09-29"
+    "asOf": "2026-09-29",
+    "country": "NZ",
+    "reviewEveryMonths": 6
   },
   "ETF_Factsheets/australian-etf-basics.md": {
     "title": "Australian ETFs: structure, costs and risks",
     "url": "https://moneysmart.gov.au/managed-funds-and-etfs/exchange-traded-funds-etfs",
     "licence": "own-content",
     "publisher": "Investment Research Library",
-    "asOf": "2026-09-29"
+    "asOf": "2026-09-29",
+    "country": "AU",
+    "reviewEveryMonths": 6
   },
   "Library_Notes/fund-platform-cost-comparison.md": {
     "title": "Comparing investment fund and platform costs",
     "url": "https://moneysmart.gov.au/managed-funds-and-etfs/managed-funds-fee-calculator",
     "licence": "own-content",
     "publisher": "Investment Research Library",
-    "asOf": "2026-09-29"
+    "asOf": "2026-09-29",
+    "country": "GLOBAL",
+    "reviewEveryMonths": 12
   },
   "Australia_Guides/australian-super-basics.md": {
     "title": "Australian superannuation basics",
     "url": "https://www.ato.gov.au/individuals-and-families/super-for-individuals-and-families/super",
     "licence": "own-content",
     "publisher": "Investment Research Library",
-    "asOf": "2026-09-29"
+    "asOf": "2026-09-29",
+    "country": "AU",
+    "reviewEveryMonths": 6
   },
   "Australia_Guides/apra-performance-test.md": {
     "title": "Understanding APRA's superannuation performance test",
     "url": "https://www.apra.gov.au/annual-superannuation-performance-test",
     "licence": "own-content",
     "publisher": "Investment Research Library",
-    "asOf": "2026-09-29"
+    "asOf": "2026-09-29",
+    "country": "AU",
+    "reviewEveryMonths": 6
   },
   "Library_Notes/asset-allocation-and-rebalancing.md": {
     "title": "Asset allocation, diversification and rebalancing",
     "url": "",
     "licence": "own-content",
     "publisher": "Investment Research Library",
-    "asOf": "2026-09-29"
+    "asOf": "2026-09-29",
+    "country": "GLOBAL",
+    "reviewEveryMonths": 12
   },
   "Library_Notes/compounding-and-projections.md": {
     "title": "Compounding and wealth projections",
     "url": "",
     "licence": "own-content",
     "publisher": "Investment Research Library",
-    "asOf": "2026-09-29"
+    "asOf": "2026-09-29",
+    "country": "GLOBAL",
+    "reviewEveryMonths": 12
   },
   "Library_Notes/currency-exposure-and-hedging.md": {
     "title": "Currency exposure and hedging for Kiwi investors",
     "url": "",
     "licence": "own-content",
     "publisher": "Investment Research Library",
-    "asOf": "2026-09-29"
+    "asOf": "2026-09-29",
+    "country": "GLOBAL",
+    "reviewEveryMonths": 12
   },
   "Library_Notes/etf-domicile-for-nz-investors.md": {
     "title": "ETF domicile: US-listed versus Irish-domiciled ETFs for NZ investors",
     "url": "",
     "licence": "own-content",
     "publisher": "Investment Research Library",
-    "asOf": "2026-09-29"
+    "asOf": "2026-09-29",
+    "country": "NZ",
+    "reviewEveryMonths": 6
   },
   "Library_Notes/index-funds-and-costs.md": {
     "title": "Index funds and why costs matter",
     "url": "",
     "licence": "own-content",
     "publisher": "Investment Research Library",
-    "asOf": "2026-09-29"
+    "asOf": "2026-09-29",
+    "country": "GLOBAL",
+    "reviewEveryMonths": 12
   },
   "Library_Notes/investing-through-market-crashes.md": {
     "title": "Investing psychology: market crashes, FOMO and staying the course",
     "url": "",
     "licence": "own-content",
     "publisher": "Investment Research Library",
-    "asOf": "2026-09-29"
+    "asOf": "2026-09-29",
+    "country": "GLOBAL",
+    "reviewEveryMonths": 12
   },
   "Library_Notes/lump-sum-vs-dollar-cost-averaging.md": {
     "title": "Lump sum versus dollar-cost averaging",
     "url": "",
     "licence": "own-content",
     "publisher": "Investment Research Library",
-    "asOf": "2026-09-29"
+    "asOf": "2026-09-29",
+    "country": "GLOBAL",
+    "reviewEveryMonths": 12
   },
   "Library_Notes/mortgage-vs-investing.md": {
     "title": "Paying off the mortgage versus investing",
     "url": "",
     "licence": "own-content",
     "publisher": "Investment Research Library",
-    "asOf": "2026-09-29"
+    "asOf": "2026-09-29",
+    "country": "GLOBAL",
+    "reviewEveryMonths": 12
   },
   "Library_Notes/safe-withdrawal-rates.md": {
     "title": "Safe withdrawal rates and the 4% rule",
     "url": "",
     "licence": "own-content",
     "publisher": "Investment Research Library",
-    "asOf": "2026-09-29"
+    "asOf": "2026-09-29",
+    "country": "GLOBAL",
+    "reviewEveryMonths": 12
   },
   "_example_licensed_pdf.pdf": {
     "title": "Example: add third-party documents like this",
@@ -124,6 +158,8 @@
     "licence": "permission-granted",
     "publisher": "Name of rights holder",
     "asOf": "2026-09-29",
-    "note": "Delete this example. licence must be one of own-content, public-domain, cc-by, permission-granted, licensed, personal-study-only."
+    "note": "Delete this example. licence must be one of own-content, public-domain, cc-by, permission-granted, licensed, personal-study-only.",
+    "country": "GLOBAL",
+    "reviewEveryMonths": 12
   }
 }

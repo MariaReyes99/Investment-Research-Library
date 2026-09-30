@@ -8,6 +8,7 @@
  * "Real" values are in today's dollars (deflated by inflationPct).
  */
 import { z } from "zod";
+import { COUNTRY_CODES } from "../countries";
 
 export const ProjectionAssetSchema = z.object({
   id: z.string().min(1).max(60),
@@ -46,6 +47,8 @@ type ProjectionDebt = z.output<typeof ProjectionDebtSchema>;
 // ---------------------------------------------------------------------------
 export const ProjectionInputSchema = z
   .object({
+    /** Country whose currency the amounts are in. Used for labels only. */
+    country: z.enum(COUNTRY_CODES).optional(),
     currentAge: z.number().int().min(16).max(100),
     retirementAge: z.number().int().min(17).max(100),
     /** Age the projection runs to (for drawdown). Default 90. */

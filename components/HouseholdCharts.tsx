@@ -3,15 +3,16 @@
 import {
   Area, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
-import type { HouseholdResult } from '../lib/finance/household';
+import { fxFor, retirementCurrency, type HouseholdResult } from '../lib/finance/household';
 import type { Finding, HouseholdAnalysis } from '../lib/finance/householdAnalysis';
-import { money } from './ProjectionChart';
+import { COUNTRIES, moneyFor, type CountryCode } from '../lib/countries';
 
 const compact = (n: number) => new Intl.NumberFormat('en-NZ', { notation: 'compact', maximumFractionDigits: 1 }).format(n);
 const COLORS = { line: '#53634f', range: '#c9d3c1', liquid: '#087e8b', goal: '#c77957', retire: '#737a70', grid: '#e4e7de', tick: '#737a70' };
 
 /** Net worth band (Low to High), expected net worth, and cash plus investments. */
 export function HouseholdChart({ result, height = 300 }: { result: HouseholdResult; height?: number }) {
+  const money = moneyFor(result.inputs.country);
   const [low, mid, high] = result.scenarios;
   const data = mid.series.map((p, k) => ({
     age: p.age,
@@ -48,7 +49,7 @@ export function HouseholdChart({ result, height = 300 }: { result: HouseholdResu
         </ResponsiveContainer>
       </div>
       <figcaption>
-        Today&apos;s dollars. Solid line: expected net worth, with the low-to-high range shaded. Dashed line: cash and
+        Today&apos;s money. Solid line: expected net worth, with the low-to-high range shaded. Dashed line: cash and
         investments you can spend (property not included).
       </figcaption>
     </figure>
@@ -56,6 +57,7 @@ export function HouseholdChart({ result, height = 300 }: { result: HouseholdResu
 }
 
 export function HouseholdHeadline({ result }: { result: HouseholdResult }) {
+  const money = moneyFor(result.inputs.country);
   const mid = result.scenarios[1];
   const atRet = result.milestones.find((m) => m.age === result.retirementAge);
   const goal = result.goal;
@@ -63,16 +65,35 @@ export function HouseholdHeadline({ result }: { result: HouseholdResult }) {
     <div className="projection-summary">
       <p className="projection-headline">
         {atRet ? (
-          <>At {result.retirementAge}, expected net worth is about <strong>{money(atRet.expected)}</strong> in today&apos;s dollars, including <strong>{money(atRet.liquid)}</strong> in cash and investments.</>
+          <>At {result.retirementAge}, expected net worth is about <strong>{money(atRet.expected)}</strong> in today&apos;s money, including <strong>{money(atRet.liquid)}</strong> in cash and investments.</>
         ) : (
           <>Net worth today is <strong>{money(result.today.netWorth)}</strong>.</>
         )}
       </p>
+      {atRet && result.inputs.retireIn && result.inputs.retireIn !== result.inputs.country && (() => {
+        const cur = retirementCurrency(result.inputs);
+        const months = (result.retirementAge - result.inputs.you.currentAge) * 12;
+        const rate = fxFor(result.inputs).at(cur, months);
+        const there = moneyFor(result.inputs.retireIn);
+        return (
+          <p className="projection-goal">
+            In {COUNTRIES[result.inputs.retireIn].name}, that is about <strong>{there(atRet.expected / rate)}</strong> net worth and{' '}
+            <strong>{there(atRet.liquid / rate)}</strong> in cash and investments, at the exchange rate expected then.
+          </p>
+        );
+      })()}
       {goal && (
         <p className="projection-goal">
           {goal.onTrack
             ? `That reaches your ${money(goal.target)} goal by age ${goal.targetAge} in the expected case.`
             : `That is ${money(goal.gap)} short of your ${money(goal.target)} goal at age ${goal.targetAge}. The range is ${money(goal.low)} to ${money(goal.high)}.`}
+        </p>
+      )}
+      {result.monteCarlo.runs > 0 && (
+        <p className="projection-goal">
+          In {result.monteCarlo.runs} simulated markets with {result.monteCarlo.volatilityPct}% yearly swings, spending was
+          covered to age {result.inputs.endAge} in <strong>{Math.round(result.monteCarlo.successRate * 100)}%</strong> of them
+          {result.monteCarlo.goalProbability !== null && <>, and the goal was reached in {Math.round(result.monteCarlo.goalProbability * 100)}%</>}.
         </p>
       )}
       <p className="projection-goal">
@@ -85,12 +106,13 @@ export function HouseholdHeadline({ result }: { result: HouseholdResult }) {
 }
 
 export function HouseholdMilestones({ result }: { result: HouseholdResult }) {
+  const money = moneyFor(result.inputs.country);
   if (!result.milestones.length) return null;
   const couple = Boolean(result.inputs.partner);
   return (
     <div className="table-scroll">
       <table className="milestone-table">
-        <caption>Net worth at each age, in today&apos;s dollars</caption>
+        <caption>Net worth at each age, in today&apos;s money</caption>
         <thead>
           <tr>
             <th scope="col">{couple ? 'Your age (partner)' : 'Age'}</th>
@@ -117,12 +139,13 @@ export function HouseholdMilestones({ result }: { result: HouseholdResult }) {
 }
 
 export function HouseholdComparison({ result }: { result: HouseholdResult }) {
+  const money = moneyFor(result.inputs.country);
   if (!result.comparison?.length) return null;
   const hasGoal = Boolean(result.goal);
   return (
     <div className="table-scroll">
       <table className="milestone-table">
-        <caption>Return assumptions side by side (expected case, today&apos;s dollars)</caption>
+        <caption>Return assumptions side by side (expected case, today&apos;s money)</caption>
         <thead>
           <tr>
             <th scope="col">Assumption</th>
@@ -159,10 +182,11 @@ export function HouseholdWarnings({ result }: { result: HouseholdResult }) {
   );
 }
 
-const signed = (n: number) => (Math.abs(n) < 1 ? '—' : `${n > 0 ? '+' : '−'}${money(Math.abs(n))}`);
 
 /** Strengths, weaknesses, risks and measured levers. Education, not recommendations. */
-export function HouseholdAnalysisView({ analysis }: { analysis: HouseholdAnalysis }) {
+export function HouseholdAnalysisView({ analysis, country }: { analysis: HouseholdAnalysis; country: CountryCode }) {
+  const money = moneyFor(country);
+  const signed = (n: number) => (Math.abs(n) < 1 ? '—' : `${n > 0 ? '+' : '−'}${money(Math.abs(n))}`);
   const groups: [string, string, Finding[]][] = [
     ['Strengths', 'is-strength', analysis.strengths],
     ['Weaknesses', 'is-weakness', analysis.weaknesses],
@@ -185,7 +209,7 @@ export function HouseholdAnalysisView({ analysis }: { analysis: HouseholdAnalysi
         <div className="analysis-levers">
           <h3>Levers to explore</h3>
           <p className="asset-editor-note">
-            Each row re-runs your whole plan with one change, in the expected case and today&apos;s dollars. These show
+            Each row re-runs your whole plan with one change, in the expected case and today&apos;s money. These show
             trade-offs, not recommendations. A licensed financial adviser can tell you what suits you.
           </p>
           <div className="table-scroll">

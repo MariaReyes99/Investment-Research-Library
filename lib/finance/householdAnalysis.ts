@@ -8,7 +8,9 @@
  * This is education, not advice: levers show trade-offs, they are not
  * recommendations, and every lever carries its downside.
  */
-import { projectHousehold, type Household, type HouseholdResult } from './household';
+import { projectHousehold, retirementCurrency, fxFor, type Currency, type Household, type HouseholdResult } from './household';
+import { COUNTRIES } from '../countries';
+import { moneyFor, profile } from '../countries';
 
 export interface Finding { title: string; detail: string }
 
@@ -16,7 +18,7 @@ export interface Lever {
   title: string;
   change: string;
   tradeOff: string;
-  /** Expected case, today's dollars. */
+  /** Expected case, today's money. */
   liquidAtEnd: number;
   netWorthAtEnd: number;
   liquidDelta: number;
@@ -46,7 +48,6 @@ export interface HouseholdAnalysis {
   baseline: { liquidAtEnd: number; netWorthAtEnd: number; runsOutAge: number | null; endAge: number };
 }
 
-const nzd = (n: number) => `$${Math.round(n).toLocaleString('en-NZ')}`;
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 
@@ -58,17 +59,20 @@ function measure(r: HouseholdResult) {
 
 export function analyseHousehold(r: HouseholdResult): HouseholdAnalysis {
   const h = r.inputs;
+  const nzd = moneyFor(h.country);
+  const country = profile(h.country);
   const [low, mid] = r.scenarios;
+  const mc = r.monteCarlo;
   const today = r.today;
   const assets = today.assets || 1;
 
   // Composition
-  const holdings = [
+  const holdings = ([
     { name: 'Cash', value: h.cashOnHand },
     ...h.investments.map((i) => ({ name: i.name, value: i.balance })),
     ...h.properties.map((p) => ({ name: p.name, value: p.value })),
     ...h.otherAssets.map((a) => ({ name: a.name, value: a.value })),
-  ];
+  ]).filter((x) => x.value > 0);
   const largest = holdings.reduce((a, b) => (b.value > a.value ? b : a), { name: '', value: 0 });
   const propertyValue = sum(h.properties.map((p) => p.value));
   const propertyShare = propertyValue / assets;
@@ -94,7 +98,7 @@ export function analyseHousehold(r: HouseholdResult): HouseholdAnalysis {
 
   const baseline = { ...measure(r), endAge: h.endAge };
   // Fee cost measured at retirement, before any drawdown can hide it
-  const noFees = projectHousehold({ ...h, compare: undefined, investments: h.investments.map((i) => ({ ...i, feesPct: 0 })) });
+  const noFees = projectHousehold({ ...h, compare: undefined, investments: h.investments.map((i) => ({ ...i, feesPct: 0 })) }, { monteCarlo: false });
   const liquidAt = (x: HouseholdResult) => x.milestones.find((m) => m.age === x.retirementAge)?.liquid ?? x.today.liquid;
   const feeCostAtRetirement = Math.max(0, liquidAt(noFees) - liquidAt(r));
 
@@ -116,6 +120,17 @@ export function analyseHousehold(r: HouseholdResult): HouseholdAnalysis {
     risks.push({ title: 'Lower returns shorten how long savings last', detail: `In the expected case savings last to ${h.endAge}, but in the low case they run out at about ${low.shortfallAge}.` });
   } else {
     weaknesses.push({ title: 'Savings run out before the end of the plan', detail: `In the expected case, cash and investments run out at about age ${mid.shortfallAge}. After that, spending relies on income alone or on selling property.` });
+  }
+
+  // Monte Carlo
+  const mcPct = Math.round(mc.successRate * 100);
+  if (mc.successRate >= 0.85) {
+    strengths.push({ title: 'Holds up in most simulated markets', detail: `Spending was covered to age ${h.endAge} in ${mcPct}% of ${mc.runs} simulated markets with ${mc.volatilityPct}% yearly swings in returns.` });
+  } else {
+    risks.push({
+      title: 'Market swings could cut the plan short',
+      detail: `Spending was covered to age ${h.endAge} in only ${mcPct}% of ${mc.runs} simulated markets${mc.medianShortfallAge ? `; when money ran out, it was typically around age ${mc.medianShortfallAge}` : ''}. Many planners aim for 80 to 90% or more.`,
+    });
   }
 
   // Concentration
@@ -165,7 +180,7 @@ export function analyseHousehold(r: HouseholdResult): HouseholdAnalysis {
     risks.push({ title: 'Optimistic return assumptions', detail: `Investments are assumed to return ${weightedReturnPct.toFixed(1)}% a year on average before fees. Higher expected returns come with bigger swings; check the low case, and try the comparison with lower returns.` });
   }
   if (weightedFeesPct !== null && weightedFeesPct >= 0.5) {
-    weaknesses.push({ title: 'Fees add up', detail: `Average fees are ${weightedFeesPct.toFixed(2)}% a year. By age ${r.retirementAge} they cost about ${nzd(feeCostAtRetirement)} in today's dollars.` });
+    weaknesses.push({ title: 'Fees add up', detail: `Average fees are ${weightedFeesPct.toFixed(2)}% a year. By age ${r.retirementAge} they cost about ${nzd(feeCostAtRetirement)} in today's money.` });
   } else if (weightedFeesPct !== null && invTotal > 0) {
     strengths.push({ title: 'Low fees', detail: `Average fees are ${weightedFeesPct.toFixed(2)}% a year (about ${nzd(feeCostAtRetirement)} by age ${r.retirementAge}).` });
   }
@@ -184,13 +199,46 @@ export function analyseHousehold(r: HouseholdResult): HouseholdAnalysis {
     risks.push({ title: 'One income', detail: 'The plan relies on one salary. Losing it would change the picture quickly.' });
   }
   if (!h.incomes.some((i) => i.kind === 'pension')) {
-    weaknesses.push({ title: 'No pension included', detail: 'If you will receive NZ Super, adding it usually changes the retirement picture a lot.' });
+    weaknesses.push({ title: 'No pension included', detail: `If you will receive ${country.pension.name}, adding it usually changes the retirement picture a lot.` });
+  }
+
+  // Currency: how much is held abroad, and what a 20% exchange-rate move would do
+  const fx = fxFor(h);
+  const home = fx.home;
+  const inHome = (value: number, cur?: Currency) => value * fx.at(cur, 0);
+  const foreign = [
+    ...h.investments.map((i) => ({ cur: i.currency, v: inHome(i.balance, i.currency) })),
+    ...h.properties.map((p) => ({ cur: p.currency, v: inHome(p.value, p.currency) })),
+    ...h.otherAssets.map((a) => ({ cur: a.currency, v: inHome(a.value, a.currency) })),
+  ].filter((x) => x.cur && x.cur !== home);
+  const foreignShare = sum(foreign.map((x) => x.v)) / assets;
+  const retCur = retirementCurrency(h);
+  if (foreignShare > 0) {
+    const curs = [...new Set(foreign.map((x) => x.cur))].join(' and ');
+    strengths.push({ title: 'Assets in more than one currency', detail: `${pct(foreignShare)} of assets are in ${curs}, which spreads currency risk.` });
+  }
+  if (retCur !== home) {
+    const stressed = measure(projectHousehold({ ...h, compare: undefined }, { monteCarlo: false, fxScale: { [retCur]: 1.2 } }));
+    const retShare = sum(foreign.filter((x) => x.cur === retCur).map((x) => x.v)) / assets;
+    const effect = stressed.runsOutAge === baseline.runsOutAge
+      ? `the plan's outcome to age ${h.endAge} would change by ${nzd(stressed.liquidAtEnd - baseline.liquidAtEnd)} in cash and investments`
+      : stressed.runsOutAge === null ? 'savings would still last' : `savings would run out at about ${stressed.runsOutAge} instead of ${baseline.runsOutAge ?? `lasting to ${h.endAge}`}`;
+    risks.push({
+      title: 'Currency risk in retirement',
+      detail: `Retirement costs are in ${retCur}, but only ${pct(retShare)} of assets are held in ${retCur}. If the ${retCur} rose 20% against the ${home}, ${effect}.`,
+    });
+  } else if (foreignShare >= 0.25) {
+    risks.push({ title: 'Currency risk', detail: `${pct(foreignShare)} of assets are in other currencies, so exchange-rate moves change their value in ${home}.` });
+  }
+  const pensionCountries = [...new Set(h.incomes.filter((i) => i.kind === 'pension').map((i) => COUNTRIES[h.country].currency === (i.currency ?? home) ? h.country : Object.values(COUNTRIES).find((c) => c.currency === i.currency)?.code))];
+  if (pensionCountries.length > 1) {
+    strengths.push({ title: 'Pensions from more than one country', detail: `Pension income is expected from ${pensionCountries.map((c) => (c ? COUNTRIES[c].name : '')).join(' and ')}. Check each country's rules on paying pensions abroad and whether one reduces the other.` });
   }
 
   // Levers: each re-runs the whole projection with one change
   const levers: Lever[] = [];
   const tryLever = (title: string, change: string, tradeOff: string, next: Household) => {
-    const m = measure(projectHousehold({ ...next, compare: undefined }));
+    const m = measure(projectHousehold({ ...next, compare: undefined }, { monteCarlo: false }));
     levers.push({
       title, change, tradeOff, ...m,
       liquidDelta: m.liquidAtEnd - baseline.liquidAtEnd,
@@ -246,7 +294,22 @@ export function analyseHousehold(r: HouseholdResult): HouseholdAnalysis {
     tryLever('Invest cash above a 6-month buffer', `Keep ${nzd(keep)} in cash; invest ${nzd(move)} at ${weightedReturnPct.toFixed(1)}%`, 'Invested money can fall in value; cash can\'t.', {
       ...h,
       cashOnHand: keep,
-      investments: [...h.investments, { name: 'Invested cash', kind: 'shares', owner: 'you', balance: move, returnPct: weightedReturnPct, feesPct: weightedFeesPct ?? 0, monthlyContribution: 0, contributionsStopAtRetirement: true }],
+      investments: [...h.investments, { name: 'Invested cash', kind: 'shares', owner: 'you', balance: move, returnPct: weightedReturnPct, feesPct: weightedFeesPct ?? 0, monthlyContribution: 0, contributionsStopAtRetirement: true, taxTreatment: 'returns_after_tax', taxRatePct: 0 }],
+    });
+  }
+  if (mid.shortfallAge !== null && h.withdrawal.strategy === 'needs') {
+    tryLever('Flexible spending in retirement', 'Guardrails: cut spending 10% after bad years, raise it 10% after good ones', 'Retirement income goes up and down instead of staying steady.', {
+      ...h,
+      withdrawal: { strategy: 'guardrails', ratePct: h.withdrawal.ratePct },
+    });
+  }
+  if (mid.shortfallAge !== null && h.properties.length > 0 && !h.events.some((e) => e.kind === 'sell_property')) {
+    const candidates = h.properties.length > 1 ? h.properties.slice(1) : h.properties;
+    const target = [...candidates].sort((a, b) => b.value - a.value)[0];
+    const age = Math.min(Math.max(r.retirementAge, h.you.currentAge + 1), h.endAge - 1);
+    tryLever(`Sell ${target.name} at ${age}`, `Sell it when you retire and invest the proceeds (after 3% selling costs and its mortgage)`, h.properties.length > 1 ? 'Loses any rent and future growth on that property; selling costs and tax may apply.' : 'You would need somewhere else to live; this is most relevant when downsizing.', {
+      ...h,
+      events: [...h.events, { name: `Sell ${target.name}`, kind: 'sell_property', atAge: age, amount: 0, propertyName: target.name, replacementValue: 0, sellingCostsPct: 3 }],
     });
   }
 

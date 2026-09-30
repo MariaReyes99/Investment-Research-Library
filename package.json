@@ -9,7 +9,9 @@
     "start": "next start",
     "seed": "tsx lib/seed.ts",
     "test": "tsx --test tests/*.test.ts",
-    "seed:check": "tsx lib/seed.ts --dry-run"
+    "seed:check": "tsx lib/seed.ts --dry-run",
+    "eval": "tsx scripts/eval.ts",
+    "check:sources": "tsx scripts/check-sources.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.3.0",

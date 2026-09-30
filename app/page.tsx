@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useChat } from '@ai-sdk/react';
 import ReactMarkdown from 'react-markdown';
@@ -14,7 +14,9 @@ import { projectHousehold, type HouseholdInput } from '../lib/finance/household'
 import { projectorLink } from '../lib/finance/householdLink';
 import { collectionLabel } from '../lib/collections';
 import { projectWealth, type ProjectionInput } from '../lib/finance/projections';
-import { DISCLAIMER } from '../lib/guardrails/advice';
+import { householdFromSimple } from '../lib/finance/fromSimple';
+import { BasisLabel, CountrySelect, RetireInSelect, useCountry, useRetireIn } from '../components/CountryPicker';
+import { COUNTRIES, disclaimerFor, isCountry, type CountryCode } from '../lib/countries';
 import { safeHttpUrl } from '../lib/security';
 
 type Source = {
@@ -38,53 +40,80 @@ const TOPICS: [string, string][] = [
   ['Currency', 'How does the NZD exchange rate affect returns on US shares?'],
 ];
 
+/**
+ * Projections are calculated once per set of inputs and reused. The chat
+ * redraws many times a second while an answer streams in, and recalculating
+ * (hundreds of simulated markets) on every redraw would freeze the page.
+ */
+const projectionCache = new Map<string, unknown>();
+function once<T>(key: string, compute: () => T): T {
+  if (!projectionCache.has(key)) {
+    projectionCache.set(key, compute());
+    if (projectionCache.size > 40) projectionCache.delete(projectionCache.keys().next().value as string);
+  }
+  return projectionCache.get(key) as T;
+}
+
 /** The chart is recomputed from the tool's inputs, so the full series never goes through the model. */
-function ProjectionFromArgs({ args }: { args: unknown }) {
-  const result = useMemo(() => {
+const ProjectionFromArgs = memo(function ProjectionFromArgs({ args, country: selected }: { args: unknown; country: CountryCode }) {
+  // Label the chart in the currency the projection was run in, not just the sidebar setting
+  const requested = (args as { country?: unknown } | null)?.country;
+  const country: CountryCode = isCountry(requested) ? requested : selected;
+  const key = `wealth:${country}:${JSON.stringify(args)}`;
+  const data = useMemo(() => once(key, () => {
     try {
-      return projectWealth(args as ProjectionInput);
+      const result = projectWealth(args as ProjectionInput);
+      // The same plan as a household, so simple questions also get the full analysis
+      const household = householdFromSimple(args as ProjectionInput, country);
+      const analysis = analyseHousehold(projectHousehold(household));
+      return { result, household, analysis };
     } catch {
       return null;
     }
-  }, [args]);
-  if (!result) return null;
+  }), [key]);
+  if (!data) return null;
   return (
     <details className="source-disclosure projection-disclosure" open>
       <summary>Projection</summary>
-      <ProjectionChart result={result} />
-      <MilestoneTable result={result} />
+      <BasisLabel country={country} inflationPct={data.result.inputs.inflationPct} />
+      <ProjectionChart result={data.result} country={country} />
+      <MilestoneTable result={data.result} country={country} />
+      <HouseholdAnalysisView analysis={data.analysis} country={country} />
       <p className="projection-note">
-        <Link href="/calculator">Open the wealth projector</Link> to change these assumptions privately on your device.
+        <a href={projectorLink(data.household)}>Open these numbers in the wealth projector</a> to add income, property,
+        pensions and more, privately on your device.
       </p>
     </details>
   );
-}
+});
 
 /** Whole-household projection, redrawn in the browser from the tool's inputs. */
-function HouseholdFromArgs({ args }: { args: unknown }) {
-  const { result, analysis } = useMemo(() => {
+const HouseholdFromArgs = memo(function HouseholdFromArgs({ args }: { args: unknown }) {
+  const key = `household:${JSON.stringify(args)}`;
+  const { result, analysis } = useMemo(() => once(key, () => {
     try {
       const r = projectHousehold(args as HouseholdInput);
       return { result: r, analysis: analyseHousehold(r) };
     } catch {
       return { result: null, analysis: null };
     }
-  }, [args]);
+  }), [key]);
   if (!result || !analysis) return null;
   return (
     <details className="source-disclosure projection-disclosure" open>
       <summary>Household projection</summary>
+      <BasisLabel country={result.inputs.country} inflationPct={result.inputs.inflationPct} retireIn={result.inputs.retireIn} fx={result.inputs.fx} />
       <HouseholdWarnings result={result} />
       <HouseholdChart result={result} />
       <HouseholdMilestones result={result} />
       <HouseholdComparison result={result} />
-      <HouseholdAnalysisView analysis={analysis} />
+      <HouseholdAnalysisView analysis={analysis} country={result.inputs.country} />
       <p className="projection-note">
         <a href={projectorLink(args as HouseholdInput)}>Open these numbers in the wealth projector</a> to change them privately on your device.
       </p>
     </details>
   );
-}
+});
 
 /** Wraps Markdown tables so wide ones scroll instead of breaking the layout. */
 const MARKDOWN_COMPONENTS = {
@@ -96,6 +125,8 @@ const MARKDOWN_COMPONENTS = {
 type UsageInfo = { remaining: number | null; limit: number; tier: LimitTier; limitsActive: boolean };
 
 export default function Page() {
+  const [country, setCountry] = useCountry();
+  const [retireIn, setRetireIn] = useRetireIn();
   const [privacyNotice, setPrivacyNotice] = useState<string | null>(null);
   const [remaining, setRemaining] = useState<number | null>(null);
   const [answerHeld, setAnswerHeld] = useState(false);
@@ -116,6 +147,7 @@ export default function Page() {
 
   const { messages, input, setInput, setMessages, handleInputChange, handleSubmit, status, error } = useChat({
     api: '/api/chat',
+    body: { country, retireIn: retireIn && retireIn !== country ? retireIn : undefined },
     onResponse: (res) => {
       const notice = res.headers.get('X-Privacy-Notice');
       setPrivacyNotice(notice ? decodeURIComponent(notice) : null);
@@ -134,7 +166,7 @@ export default function Page() {
   const usageLabel =
     left === null || !usage?.limitsActive
       ? 'ANSWERS CITE THE LIBRARY'
-      : `${left} OF ${usage.limit} ${usage.tier === 'anonymous' || usage.tier === 'free' ? 'FREE ' : ''}QUESTIONS LEFT TODAY`;
+      : `${left} OF ${usage.limit} ${usage.tier === 'anonymous' || usage.tier === 'free' ? 'FREE ' : ''}QUESTIONS LEFT THIS MONTH`;
 
   return (
     <main className="guide-shell">
@@ -143,7 +175,7 @@ export default function Page() {
           <span className="brand-mark" aria-hidden="true">R</span>
           <span className="brand-copy">
             <strong>Research Library</strong>
-            <small>NZ &amp; AU INVESTORS</small>
+            <small>NZ, AU, US, UK, PH</small>
           </span>
         </a>
 
@@ -171,6 +203,11 @@ export default function Page() {
           </Link>
         </div>
 
+        <div className="rail-section rail-country">
+          <CountrySelect id="chat-country" value={country} onChange={setCountry} label="I live in" />
+          <RetireInSelect id="chat-retire-in" value={retireIn && retireIn !== country ? retireIn : null} livesIn={country} onChange={setRetireIn} />
+        </div>
+
         <div className="rail-section recent-section">
           <p className="rail-label">EXPLORE</p>
           {TOPICS.map(([label, question]) => (
@@ -190,11 +227,16 @@ export default function Page() {
 
       <section className="guide-workspace" id="top">
         <header className="workspace-bar">
-          <div className="breadcrumb"><span>RESEARCH DESK</span><b>/</b> INVESTMENT LIBRARY</div>
+          <div className="breadcrumb"><span>RESEARCH DESK</span><b>/</b> INVESTMENT LIBRARY <b>/</b> {COUNTRIES[country].name.toUpperCase()} ({COUNTRIES[country].currency})</div>
           <div className="source-count">
             <span className="ready-dot" /> <span className="usage-meter">{usageLabel}</span>
           </div>
         </header>
+        {/* On phones the sidebar is hidden, so country settings sit under the top bar */}
+        <div className="mobile-settings">
+          <CountrySelect id="chat-country-mobile" value={country} onChange={setCountry} label="I live in" />
+          <RetireInSelect id="chat-retire-in-mobile" value={retireIn && retireIn !== country ? retireIn : null} livesIn={country} onChange={setRetireIn} />
+        </div>
 
         <div className="conversation-column">
           {messages.length === 0 ? (
@@ -206,8 +248,16 @@ export default function Page() {
                 Research investing questions against guides on ETFs, KiwiSaver, FIF tax and retirement, and see what
                 your savings could grow to. Every answer shows its sources.
               </p>
+              {COUNTRIES[country].coverage !== 'full' && (
+                <p className="coverage-note">
+                  You&apos;ve chosen {COUNTRIES[country].name}. Projections use {COUNTRIES[country].name} settings and{' '}
+                  {COUNTRIES[country].currency}. The library&apos;s {COUNTRIES[country].name} documents are{' '}
+                  {COUNTRIES[country].coverage === 'partial' ? 'still being expanded' : 'not added yet'}, so answers about its tax
+                  and pension rules will point you to official sources.
+                </p>
+              )}
               <div className="suggestion-list" aria-label="Suggested questions">
-                {SUGGESTIONS.map((question) => (
+                {SUGGESTIONS.map((q) => q.replace('NZD', COUNTRIES[country].currency)).map((question) => (
                   <button className="suggestion-chip" key={question} type="button" onClick={() => setInput(question)}>
                     {question}<span aria-hidden="true">↗</span>
                   </button>
@@ -237,7 +287,7 @@ export default function Page() {
                           if (invocation.state !== 'result') return null;
                           if (invocation.toolName === 'projectWealth') {
                             return (invocation.result as { ok?: boolean })?.ok ? (
-                              <ProjectionFromArgs key={invocation.toolCallId} args={invocation.args} />
+                              <ProjectionFromArgs key={invocation.toolCallId} args={invocation.args} country={country} />
                             ) : null;
                           }
                           if (invocation.toolName === 'projectHousehold') {
@@ -279,14 +329,18 @@ export default function Page() {
                           );
                         })}
 
-                      {finished && message.content && <p className="disclaimer-note">{DISCLAIMER}</p>}
+                      {finished && message.content && <p className="disclaimer-note">{disclaimerFor(country)}</p>}
                     </div>
                   </li>
                 );
               })}
               {isBusy && (
                 <li className="typing-status">
-                  <span /> {answerHeld ? 'Preparing and checking an educational answer…' : 'Searching the library…'}
+                  <span /> {answerHeld
+                    ? 'Preparing and checking an educational answer…'
+                    : messages[messages.length - 1]?.toolInvocations?.some((t) => t.state === 'result')
+                      ? 'Writing the answer…'
+                      : 'Searching the library…'}
                 </li>
               )}
               {error && !limitReached && (
@@ -311,7 +365,7 @@ export default function Page() {
                 id="question-input"
                 value={input}
                 onChange={handleInputChange}
-                placeholder={limitReached ? "You've used today's questions" : 'Ask about ETFs, KiwiSaver, FIF tax or your retirement numbers…'}
+                placeholder={limitReached ? "You've used this month's questions" : 'Ask about ETFs, KiwiSaver, FIF tax or your retirement numbers…'}
                 disabled={isBusy || limitReached}
                 maxLength={2000}
               />

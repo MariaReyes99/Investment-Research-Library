@@ -50,7 +50,7 @@ export default function AboutPage() {
             number.
           </li>
           <li>
-            To apply daily limits we keep a count per account, or per anonymised (hashed) internet address for visitors
+            To apply monthly question allowances we keep a count per account, or per anonymised (hashed) internet address for visitors
             who are not signed in. We don&apos;t sell your data or show ads.
           </li>
           <li>
