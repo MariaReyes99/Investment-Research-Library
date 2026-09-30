@@ -51,3 +51,20 @@ Each investment can be marked after-tax, taxed yearly, taxed on withdrawal or ta
 Not modelled: tax brackets, NZ PIE and FIF calculations, Australian super contribution caps, US Roth conversions,
 UK ISA and pension allowances, Philippine final withholding taxes. Add these one country at a time, each with
 sourced documents and tests.
+
+## 7. Security monitoring and breach response (done in code; follow the plan if something happens)
+
+**Alerts:** set `ALERT_WEBHOOK_URL` (a Slack or Discord incoming webhook) in Vercel. You are messaged, at most once an
+hour per kind, when: a Stripe webhook has a bad signature, card details are typed into the chat, checkout attempts hit
+the rate limit, usage limits can't be checked, or answers fail with errors. Alerts contain no user content.
+
+**Also switch on the alerts each service already offers:** GitHub secret scanning and Dependabot emails, Stripe email
+notifications (disputes, Radar, failed payments), OpenAI usage and budget alerts, Vercel spend notifications.
+
+**If you suspect a breach (unauthorised access to accounts, keys, or users' information):**
+1. Contain: rotate every key (OpenAI, Stripe, Clerk, Upstash, IP_HASH_SALT stays unless exposed), change passwords, sign out other sessions, redeploy.
+2. Assess: what was accessed, whose information, and whether it could cause serious harm.
+3. Notify: under the Privacy Act 2020, a notifiable privacy breach (likely to cause serious harm) must be reported to the
+   Privacy Commissioner as soon as practicable (the NotifyUs tool on privacy.org.nz), and the affected people told.
+   Users overseas may be covered by their own country's rules as well.
+4. Record: what happened, when, what you did, and what you changed so it can't happen again.

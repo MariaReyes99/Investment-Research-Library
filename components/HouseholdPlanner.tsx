@@ -12,6 +12,7 @@ import { COUNTRIES, COUNTRY_CODES, moneyFor, profile, type CountryCode } from '.
 import { HouseholdAnalysisView, HouseholdChart, HouseholdComparison, HouseholdHeadline, HouseholdMilestones, HouseholdWarnings } from './HouseholdCharts';
 import { BasisLabel, CountrySelect, RetireInSelect, useCountry, useRetireIn } from './CountryPicker';
 import SavedPlans from './SavedPlans';
+import ClearDeviceData from './ClearDeviceData';
 import { usePlan } from './usePlan';
 import { canSavePlans } from '../lib/plans';
 
@@ -743,7 +744,9 @@ export default function HouseholdPlanner() {
             onChange={(v) => set({ volatilityPct: v as number })} hint="Used for the simulated markets. Share-heavy portfolios often swing 15% or more a year; balanced ones less." />
         </details>
 
-        <p className="calc-privacy">Calculated on your device. Nothing you enter here is sent to us.</p>
+        <p className="calc-privacy">
+          Calculated on your device. Nothing you enter here is sent to us. <ClearDeviceData />
+        </p>
       </form>
 
       {/* Phones and tablets show the form first, so offer a quick jump to the results */}

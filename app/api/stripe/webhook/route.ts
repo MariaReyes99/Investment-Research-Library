@@ -9,6 +9,7 @@
  *   checkout.session.completed, customer.subscription.updated,
  *   customer.subscription.deleted
  */
+import { securityAlert } from '../../../../lib/alerts';
 import Stripe from 'stripe';
 import { safeLog } from '../../../../lib/guardrails/pii';
 import type { Plan } from '../../../../lib/plans';
@@ -49,6 +50,7 @@ export async function POST(req: Request) {
     // The raw body is required for signature verification.
     event = stripe.webhooks.constructEvent(await req.text(), signature, process.env.STRIPE_WEBHOOK_SECRET);
   } catch {
+    await securityAlert('webhook_signature_invalid', '/api/stripe/webhook');
     return new Response('Invalid signature.', { status: 400 });
   }
 

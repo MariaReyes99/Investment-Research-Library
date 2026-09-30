@@ -9,6 +9,7 @@ import { projectHousehold, type HouseholdInput, type HouseholdResult } from '../
 import { moneyFor, profile } from '../lib/countries';
 import Link from 'next/link';
 import { PLANS } from '../lib/plans';
+import ClearDeviceData from './ClearDeviceData';
 
 type SavedPlan = { id: string; name: string; savedAt: string; plan: HouseholdInput };
 const KEY = 'irl:saved-plans';
@@ -79,7 +80,13 @@ function SavedPlansTools({ plan, onLoad }: { plan: HouseholdInput; onLoad: (p: H
   const [picked, setPicked] = useState<string[]>([]);
   const [message, setMessage] = useState<string | null>(null);
 
-  useEffect(() => setSaved(load()), []);
+  useEffect(() => {
+    setSaved(load());
+    // Empty the list when data is cleared from this device
+    const cleared = () => { setSaved([]); setPicked([]); };
+    window.addEventListener('irl:saved-plans-cleared', cleared);
+    return () => window.removeEventListener('irl:saved-plans-cleared', cleared);
+  }, []);
 
   const save = () => {
     const label = name.trim() || `Plan ${saved.length + 1}`;
@@ -125,7 +132,11 @@ function SavedPlansTools({ plan, onLoad }: { plan: HouseholdInput; onLoad: (p: H
           Print or save as PDF
         </button>
       </div>
-      <p className="asset-editor-note">Plans are saved in this browser only. Nothing is sent to us. Clearing your browser data removes them.</p>
+      <p className="asset-editor-note">Plans are saved in this browser only, without a password. Nothing is sent to us.</p>
+      <p className="shared-device-warning" role="note">
+        <strong>On a shared or public computer?</strong> Anyone who uses this browser after you can open saved plans.
+        Don&apos;t save plans there, or clear them before you leave. <ClearDeviceData label="Clear saved plans and settings" />
+      </p>
       <div className="saved-plans-save">
         <div className="calc-input">
           <input aria-label="Plan name" placeholder="Name this version, e.g. Retire at 67" value={name} maxLength={60}

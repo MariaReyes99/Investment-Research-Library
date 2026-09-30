@@ -38,6 +38,7 @@ import { HouseholdInputSchema, projectHousehold, summariseHousehold } from '../.
 import { analyseHousehold, summariseAnalysis } from '../../../lib/finance/householdAnalysis';
 import { householdFromSimple } from '../../../lib/finance/fromSimple';
 import { projectionNote } from '../../../lib/chatContext';
+import { securityAlert } from '../../../lib/alerts';
 import { DEFAULT_COUNTRY, currencyCountryIn, isCountry } from '../../../lib/countries';
 import { fetchRates, isCurrency } from '../../../lib/fxRates';
 import { CURRENCIES } from '../../../lib/finance/household';
@@ -103,6 +104,7 @@ export async function POST(req: Request) {
   });
   if (latestRedaction?.blocked) {
     safeLog('blocked_payment_data', { findings: latestRedaction.findings });
+    await securityAlert('card_data_blocked', '/api/chat');
     return text(latestRedaction.userNotice ?? 'Message blocked.', 422);
   }
 
@@ -110,6 +112,7 @@ export async function POST(req: Request) {
   const viewer = await getViewer(req);
   const quota = await checkQuota(viewer.key, viewer.plan, Boolean(viewer.userId));
   if (!quota.allowed) {
+    if (quota.notConfigured) await securityAlert('usage_limits_unavailable', '/api/chat');
     const status = quota.notConfigured ? 503 : 429;
     return new Response(quota.reason ?? 'Daily limit reached.', {
       status,
@@ -273,6 +276,7 @@ export async function POST(req: Request) {
     getErrorMessage: (error) => {
       const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
       safeLog('chat_error', { message: detail });
+      void securityAlert('chat_errors', '/api/chat');
       // On your own computer, show the real reason to make problems easy to fix.
       const dev = process.env.NODE_ENV !== 'production';
       return `Sorry, something went wrong while answering. Please try again in a moment.${dev ? ` (Details for the developer: ${detail.slice(0, 300)})` : ''}`;

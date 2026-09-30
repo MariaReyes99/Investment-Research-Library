@@ -668,3 +668,9 @@ img, svg, canvas, video { max-width: 100%; }
 .plan-current-tag { margin: auto 0 0; padding: 9px 12px; border: 1px dashed var(--sage); border-radius: 6px; color: var(--sage-dark); font-size: 12.5px; font-weight: 650; text-align: center; }
 .saved-plans-locked { display: grid; gap: 10px; }
 .saved-plans-locked ul { margin: 0; padding-left: 18px; color: #4b5649; font-size: 12.5px; line-height: 1.7; }
+
+/* Clearing data from this device */
+.shared-device-warning { margin: 0; padding: 10px 12px; border-left: 3px solid var(--clay); border-radius: 6px; background: #fff9f6; color: #6b4a3d; font-size: 12px; line-height: 1.55; }
+.shared-device-warning .link-button { font-size: 12px; }
+.clear-device-data small { color: var(--muted); }
+.calc-privacy .link-button { font-size: inherit; }

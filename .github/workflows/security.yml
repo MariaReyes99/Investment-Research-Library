@@ -1,0 +1,32 @@
+# Security check: runs every Monday, on every push to main and on every pull
+# request. It fails (and GitHub emails you) if a library has a known high or
+# critical vulnerability, or if the tests break.
+name: Security check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 19 * * 0" # Monday 08:00 in New Zealand (19:00 UTC Sunday)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Check libraries for known vulnerabilities
+        run: npm audit --omit=dev --audit-level=high
+      - name: Run tests
+        run: npm test
+      - name: Check library documents are within their review dates
+        run: npm run check:sources

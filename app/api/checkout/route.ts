@@ -9,6 +9,7 @@ import Stripe from 'stripe';
 import { z } from 'zod';
 import { clerkEnabled, getViewer } from '../../../lib/viewer';
 import { checkCheckoutLimit } from '../../../lib/entitlements';
+import { securityAlert } from '../../../lib/alerts';
 import { assertSameOrigin, readJsonBody } from '../../../lib/security';
 
 const PRICE_IDS = {
@@ -32,7 +33,10 @@ export async function POST(req: Request) {
   if (!userId) return json({ error: 'Sign in to choose a plan.' }, 401);
 
   const viewer = await getViewer(req);
-  if (!(await checkCheckoutLimit(viewer.key))) return json({ error: 'Too many checkout attempts. Try again in a few minutes.' }, 429);
+  if (!(await checkCheckoutLimit(viewer.key))) {
+    await securityAlert('checkout_rate_limited', '/api/checkout');
+    return json({ error: 'Too many checkout attempts. Try again in a few minutes.' }, 429);
+  }
 
   const body = await readJsonBody(req, 1024);
   if (!body.ok) return json({ error: body.message }, body.status);
