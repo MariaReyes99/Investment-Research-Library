@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import SiteHeader from '../../components/SiteHeader';
-import PlatformComparison from '../../components/PlatformComparison';
-import HouseholdPlanner from '../../components/HouseholdPlanner';
+import ProjectorShell from '../../components/ProjectorShell';
+import PlatformComparisonSection from '../../components/PlatformComparisonSection';
 
 export const metadata: Metadata = {
   title: 'Wealth projector · Investment Research Library',
@@ -15,12 +15,13 @@ export default function CalculatorPage() {
       <main className="page-main">
         <h1 className="page-title">Wealth projector</h1>
         <p className="page-lede">
-          Put your whole household in one place: cash, investments, retirement accounts, property, income, pensions, children,
-          parents, pets and other costs, for one person or a couple. Change any number and the results update.
+          See where your money could take you. Answer a few simple questions about what you have, what comes in and what goes
+          out, and we&apos;ll show how your savings could grow and how long they could last. Private: it all happens on your
+          device.
         </p>
-        <p><a className="guide-link" href="/calculator/guide">How to fill this in, and what to change as life changes →</a></p>
-        <HouseholdPlanner />
-        <PlatformComparison />
+        <p><a className="guide-link" href="/calculator/guide">Need help? Read the step-by-step guide →</a></p>
+        <ProjectorShell />
+        <PlatformComparisonSection />
       </main>
     </div>
   );

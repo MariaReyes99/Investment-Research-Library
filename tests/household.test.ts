@@ -324,3 +324,30 @@ test('currencies: pensions and accounts follow the country of their currency', (
   near(s[1].income, 0, 0.01); // 58-59
   near(s[3].income, 10_000 * 12 * 0.03, 0.01); // 60-61: SSS starts at 60, NZ Super would be 65
 });
+
+import { answersToPlan } from '../components/PlannerWizard';
+
+test('guided answers become a full plan', () => {
+  const plan = answersToPlan({
+    who: 'couple', age: 45, partnerAge: 43, bank: 10_000,
+    savings: [{ name: 'KiwiSaver', kind: 'retirement', amount: 80_000, monthly: 400, style: 'growth' }],
+    homes: [{ name: 'Home', worth: 800_000, owe: 300_000, payment: 2_200 }],
+    pay: 6_000, partnerPay: 4_000, pension: 1_800, spending: 5_000,
+    family: [{ kind: 'child', monthly: 600, years: 8 }],
+    sellHomeAge: 70, goal: 1_500_000,
+  }, 'NZ', null);
+  assert.equal(plan.you.retirementAge, 65);
+  assert.equal(plan.partner?.currentAge, 43);
+  assert.equal(plan.investments?.[0].kind, 'kiwisaver');
+  assert.equal(plan.investments?.[0].returnPct, 7);
+  assert.equal(plan.incomes?.length, 3);
+  assert.equal(plan.events?.[0].kind, 'sell_property');
+  const r = projectHousehold(plan, { monteCarlo: false });
+  assert.ok(r.today.netWorth > 0);
+});
+
+test('blank guided answers still give a valid plan', () => {
+  const r = projectHousehold(answersToPlan({ who: 'me', age: 30, savings: [], homes: [], family: [] }, 'PH', null), { monteCarlo: false });
+  assert.equal(r.inputs.country, 'PH');
+  assert.equal(r.today.netWorth, 0);
+});

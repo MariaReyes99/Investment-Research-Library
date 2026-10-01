@@ -22,41 +22,25 @@ type Item<K extends ListKey> = Draft[K][number];
 type Owner = 'you' | 'partner' | 'joint';
 type TaxTreatment = (typeof TAX_TREATMENTS)[number];
 
-/** Rough scale so the example plan looks realistic in each currency. */
-const EXAMPLE_SCALE: Record<CountryCode, number> = { NZ: 1, AU: 1, US: 0.6, UK: 0.5, PH: 20 };
-
 function defaultPlan(country: CountryCode): Draft {
   const c = profile(country);
-  const k = EXAMPLE_SCALE[country];
-  const x = (n: number) => Math.round((n * k) / 100) * 100;
+  // Starts empty: no example numbers that could look like someone else's details
   return {
     country,
     retireIn: undefined,
     fx: [],
-    you: { currentAge: 50, retirementAge: 65 },
+    you: { currentAge: 40, retirementAge: c.pension.age },
     partner: undefined,
     endAge: 90,
     inflationPct: c.inflationPct,
-    cashOnHand: x(20_000),
+    cashOnHand: 0,
     cashInterestPct: 2.5,
-    investments: [
-      {
-        name: c.retirementAccount.name, kind: country === 'NZ' ? 'kiwisaver' : 'retirement_account', owner: 'you', balance: x(150_000),
-        returnPct: 6, feesPct: 0.5, monthlyContribution: x(600), contributionsStopAtRetirement: true,
-        taxTreatment: c.retirementAccount.taxOnWithdrawal ? 'taxed_on_withdrawal' : 'returns_after_tax',
-        taxRatePct: c.retirementAccount.taxOnWithdrawal ? 20 : 0,
-      },
-    ],
-    properties: [
-      { name: 'Home', value: x(850_000), growthPct: 3, mortgageBalance: x(300_000), mortgageRatePct: 5.5, monthlyRepayment: x(2_500), monthlyNetRent: 0 },
-    ],
-    otherAssets: [{ name: 'Car', kind: 'vehicle', value: x(25_000) }],
+    investments: [],
+    properties: [],
+    otherAssets: [],
     debts: [],
-    incomes: [
-      { name: 'Take-home pay', kind: 'salary', owner: 'you', monthlyAmount: x(7_500), risesWithInflation: true },
-      { name: c.pension.name, kind: 'pension', owner: 'you', monthlyAmount: x(2_000), risesWithInflation: true },
-    ],
-    livingExpensesMonthly: x(3_500),
+    incomes: [],
+    livingExpensesMonthly: 0,
     retirementLivingExpensesMonthly: undefined,
     dependants: [],
     otherExpenses: [],
@@ -65,7 +49,7 @@ function defaultPlan(country: CountryCode): Draft {
     contributionsFromOutsideIncome: false,
     surplusReturnPct: 5,
     volatilityPct: 12,
-    goal: { targetNetWorth: x(1_500_000), targetAge: undefined },
+    goal: undefined,
     compare: [],
   };
 }
@@ -425,6 +409,17 @@ export default function HouseholdPlanner() {
   // Typing stays responsive; the projection catches up a moment later.
   const deferred = useDeferredValue(plan);
   const lastGood = useRef<HouseholdResult | null>(null);
+
+  /** Empties every field on the screen and starts a fresh plan. */
+  const startAgain = (ask = true) => {
+    if (ask && !window.confirm('Clear everything on this screen and start again?')) return;
+    touched.current = false;
+    lastGood.current = null;
+    setLoadedFromChat(false);
+    setPlan(defaultPlan(country));
+    if (window.location.hash) window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
   const { result, error } = useMemo(() => {
     const parsed = HouseholdInputSchema.safeParse({ ...deferred, compare: deferred.compare.length ? deferred.compare : undefined });
     if (!parsed.success) return { result: null, error: friendlyError(parsed.error.issues[0], deferred) };
@@ -446,6 +441,10 @@ export default function HouseholdPlanner() {
   return (
     <div className="calc-layout is-household">
       <form className="calc-form no-print" onSubmit={(e) => e.preventDefault()} aria-label="Household plan">
+        <div className="start-again-row">
+          <button type="button" className="start-again" onClick={() => startAgain()}>🧹 Start again</button>
+          <span>Clears every field on this screen</span>
+        </div>
         {loadedFromChat && <p className="privacy-notice" role="status">Loaded the numbers from your chat answer. Change anything below.</p>}
 
         <Section legend="Who's in the plan">
@@ -469,9 +468,9 @@ export default function HouseholdPlanner() {
           <Num id="end-age" label="Plan to your age" value={plan.endAge} onChange={(v) => set({ endAge: v as number })} />
         </Section>
 
-        <Section legend="Cash on hand" note="Everyday and savings accounts. Spent first if money runs short.">
+        <Section legend="Money in the bank" note="Everyday and savings accounts. Used first if money runs short.">
           <div className="planner-pair">
-            <Num id="cash" label="Cash" unit={c.currency} step={1000} value={plan.cashOnHand} onChange={(v) => set({ cashOnHand: v as number })} />
+            <Num id="cash" label="How much" unit={c.currency} step={1000} value={plan.cashOnHand} onChange={(v) => set({ cashOnHand: v as number })} />
             <Num id="cash-rate" label="Interest" unit="%" step={0.25} value={plan.cashInterestPct} onChange={(v) => set({ cashInterestPct: v as number })} />
           </div>
         </Section>
@@ -487,7 +486,7 @@ export default function HouseholdPlanner() {
                 {currencyPicker(`inv-${i}-cur`, inv.currency, (v) => setItem('investments', i, { currency: v }))}
                 <Num id={`inv-${i}-bal`} label="Balance" unit={unitOf(inv.currency)} step={1000} value={inv.balance} onChange={(v) => setItem('investments', i, { balance: v as number })} />
                 <div className="planner-pair">
-                  <Num id={`inv-${i}-ret`} label="Return" unit="%" step={0.25} value={inv.returnPct} onChange={(v) => setItem('investments', i, { returnPct: v as number })} />
+                  <Num id={`inv-${i}-ret`} label="Yearly growth" unit="%" step={0.25} value={inv.returnPct} onChange={(v) => setItem('investments', i, { returnPct: v as number })} />
                   <Num id={`inv-${i}-fee`} label="Fees" unit="%" step={0.05} value={inv.feesPct} onChange={(v) => setItem('investments', i, { feesPct: v as number })} />
                 </div>
                 <Num id={`inv-${i}-con`} label="Monthly contribution" unit={unitOf(inv.currency)} step={50} value={inv.monthlyContribution} onChange={(v) => setItem('investments', i, { monthlyContribution: v as number })} />
@@ -515,16 +514,16 @@ export default function HouseholdPlanner() {
                 <Text id={`prop-${i}-name`} label="Name" value={p.name} onChange={(v) => setItem('properties', i, { name: v })} />
                 {currencyPicker(`prop-${i}-cur`, p.currency, (v) => setItem('properties', i, { currency: v }))}
                 <div className="planner-pair">
-                  <Num id={`prop-${i}-val`} label="Market value" unit={unitOf(p.currency)} step={5000} value={p.value} onChange={(v) => setItem('properties', i, { value: v as number })} />
+                  <Num id={`prop-${i}-val`} label="Could sell for" unit={unitOf(p.currency)} step={5000} value={p.value} onChange={(v) => setItem('properties', i, { value: v as number })} />
                   <Num id={`prop-${i}-g`} label="Growth" unit="%" step={0.25} value={p.growthPct} onChange={(v) => setItem('properties', i, { growthPct: v as number })} />
                 </div>
                 <div className="planner-pair">
-                  <Num id={`prop-${i}-mb`} label="Mortgage owing" unit={unitOf(p.currency)} step={5000} value={p.mortgageBalance} onChange={(v) => setItem('properties', i, { mortgageBalance: v as number })} />
+                  <Num id={`prop-${i}-mb`} label="Still owed" unit={unitOf(p.currency)} step={5000} value={p.mortgageBalance} onChange={(v) => setItem('properties', i, { mortgageBalance: v as number })} />
                   <Num id={`prop-${i}-mr`} label="Interest" unit="%" step={0.1} value={p.mortgageRatePct} onChange={(v) => setItem('properties', i, { mortgageRatePct: v as number })} />
                 </div>
                 <div className="planner-pair">
                   <Num id={`prop-${i}-rp`} label="Repayment" unit="/mo" step={50} value={p.monthlyRepayment} onChange={(v) => setItem('properties', i, { monthlyRepayment: v as number })} />
-                  <Num id={`prop-${i}-rent`} label="Net rent" unit="/mo" step={50} value={p.monthlyNetRent} onChange={(v) => setItem('properties', i, { monthlyNetRent: v as number })} />
+                  <Num id={`prop-${i}-rent`} label="Rent received" unit="/mo" step={50} value={p.monthlyNetRent} onChange={(v) => setItem('properties', i, { monthlyNetRent: v as number })} />
                 </div>
               </Card>
             ))}
@@ -556,7 +555,7 @@ export default function HouseholdPlanner() {
                 <Text id={`debt-${i}-name`} label="Name" value={d.name} onChange={(v) => setItem('debts', i, { name: v })} />
                 {currencyPicker(`debt-${i}-cur`, d.currency, (v) => setItem('debts', i, { currency: v }))}
                 <div className="planner-pair">
-                  <Num id={`debt-${i}-bal`} label="Owing" unit={unitOf(d.currency)} step={500} value={d.balance} onChange={(v) => setItem('debts', i, { balance: v as number })} />
+                  <Num id={`debt-${i}-bal`} label="Still owed" unit={unitOf(d.currency)} step={500} value={d.balance} onChange={(v) => setItem('debts', i, { balance: v as number })} />
                   <Num id={`debt-${i}-rate`} label="Interest" unit="%" step={0.5} value={d.ratePct} onChange={(v) => setItem('debts', i, { ratePct: v as number })} />
                 </div>
                 <Num id={`debt-${i}-pay`} label="Payment" unit="/mo" step={50} value={d.monthlyPayment} onChange={(v) => setItem('debts', i, { monthlyPayment: v as number })} />
@@ -566,7 +565,7 @@ export default function HouseholdPlanner() {
           <AddButton tone="debt" label="Add debt" onClick={() => addItem('debts')} />
         </Section>
 
-        <Section legend="Income" note={`After tax, per month, in today's money. Salary stops at retirement; pensions start at ${c.pension.age} unless you set other ages.`}>
+        <Section legend="Money coming in" note={`After tax, per month, in today's money. Salary stops at retirement; pensions start at ${c.pension.age} unless you set other ages.`}>
           <div className="asset-list">
             {plan.incomes.map((inc, i) => (
               <Card key={i} title={inc.name || 'Income'} onRemove={() => removeItem('incomes', i)}>
@@ -599,9 +598,9 @@ export default function HouseholdPlanner() {
           <AddButton label="Add income" onClick={() => addItem('incomes')} />
         </Section>
 
-        <Section legend="Spending" note="Everyday household costs. Leave out loan repayments and investing; they're counted above.">
+        <Section legend="Money going out" note="Everyday household costs. Leave out loan repayments and investing; they're counted above.">
           <div className="planner-pair">
-            <Num id="living" label="Living costs now" unit="/mo" step={100} value={plan.livingExpensesMonthly} onChange={(v) => set({ livingExpensesMonthly: v as number })} />
+            <Num id="living" label="Everyday spending now" unit="/mo" step={100} value={plan.livingExpensesMonthly} onChange={(v) => set({ livingExpensesMonthly: v as number })} />
             <Num id="living-ret" label="In retirement" unit={`${retirementCurrency(plan)}/mo`} step={100} optional value={plan.retirementLivingExpensesMonthly} onChange={(v) => set({ retirementLivingExpensesMonthly: v })}
               hint={plan.retireIn ? `In ${COUNTRIES[plan.retireIn].name}, in ${retirementCurrency(plan)}. Leave blank to use today's costs.` : undefined} />
           </div>
@@ -713,9 +712,9 @@ export default function HouseholdPlanner() {
           </Section>
         )}
 
-        <Section legend="Your goal, in today's money">
+        <Section legend="Your goal (optional)">
           <div className="planner-pair">
-            <Num id="goal" label="Target net worth" unit={c.currency} step={50000} optional value={plan.goal?.targetNetWorth}
+            <Num id="goal" label="Aim to have" unit={c.currency} step={50000} optional value={plan.goal?.targetNetWorth}
               onChange={(v) => set({ goal: { ...plan.goal, targetNetWorth: v } })} />
             <Num id="goal-age" label="By your age" optional value={plan.goal?.targetAge}
               onChange={(v) => set({ goal: { ...plan.goal, targetAge: v } })} hint="Blank = retirement" />
@@ -745,7 +744,7 @@ export default function HouseholdPlanner() {
         </details>
 
         <p className="calc-privacy">
-          Calculated on your device. Nothing you enter here is sent to us. <ClearDeviceData />
+          Calculated on your device. Nothing you enter here is sent to us. <ClearDeviceData onCleared={() => startAgain(false)} />
         </p>
       </form>
 

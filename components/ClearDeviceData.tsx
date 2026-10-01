@@ -19,7 +19,7 @@ export function clearDeviceData(): boolean {
   }
 }
 
-export default function ClearDeviceData({ label = 'Clear my data from this device' }: { label?: string }) {
+export default function ClearDeviceData({ label = 'Clear my data from this device', onCleared }: { label?: string; onCleared?: () => void }) {
   const [done, setDone] = useState<string | null>(null);
   return (
     <span className="clear-device-data">
@@ -27,8 +27,10 @@ export default function ClearDeviceData({ label = 'Clear my data from this devic
         type="button"
         className="link-button is-danger"
         onClick={() => {
-          if (!window.confirm('Delete your saved plans and country settings from this browser? This cannot be undone.')) return;
-          setDone(clearDeviceData() ? 'Deleted. Nothing from this site is left in this browser.' : "This browser wouldn't let the page delete its data. Clear site data in your browser settings instead.");
+          if (!window.confirm('Delete your answers, saved plans and country settings from this browser? This cannot be undone.')) return;
+          const ok = clearDeviceData();
+          onCleared?.();
+          setDone(ok ? 'Deleted. Nothing from this site is left in this browser.' : "This browser wouldn't let the page delete its data. Clear site data in your browser settings instead.");
         }}
       >
         {label}
