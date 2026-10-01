@@ -20,7 +20,7 @@
     "@upstash/ratelimit": "^2.2.0",
     "@upstash/redis": "^1.39.0",
     "@upstash/vector": "^1.2.0",
-    "ai": "^4.3.0",
+    "ai": "^7.0.118",
     "dotenv": "^16.4.0",
     "jszip": "^3.10.2",
     "next": "^15.5.26",
