@@ -18,7 +18,7 @@ import { collectionLabel } from '../lib/collections';
 import { projectWealth, type ProjectionInput } from '../lib/finance/projections';
 import { householdFromSimple } from '../lib/finance/fromSimple';
 import { BasisLabel, CountrySelect, RetireInSelect, useCountry, useRetireIn } from '../components/CountryPicker';
-import { COUNTRIES, disclaimerFor, isCountry, type CountryCode } from '../lib/countries';
+import { COUNTRIES, disclaimerFor, isCountry, questionHint, type CountryCode } from '../lib/countries';
 import { safeHttpUrl } from '../lib/security';
 
 type Source = {
@@ -400,7 +400,7 @@ export default function Page() {
                 id="question-input"
                 value={input}
                 onChange={handleInputChange}
-                placeholder={limitReached ? "You've used this month's questions" : 'Ask about ETFs, KiwiSaver, FIF tax or your retirement numbers…'}
+                placeholder={limitReached ? "You've used this month's questions" : questionHint(country)}
                 disabled={isBusy || limitReached}
                 maxLength={2000}
               />

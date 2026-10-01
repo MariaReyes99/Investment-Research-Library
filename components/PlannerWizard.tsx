@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { CURRENCIES, projectHousehold, usedCurrencies, type Currency, type HouseholdInput } from '../lib/finance/household';
 import { analyseHousehold } from '../lib/finance/householdAnalysis';
 import { projectorLink } from '../lib/finance/householdLink';
-import { COUNTRIES, COUNTRY_CODES, moneyFor, profile, type CountryCode } from '../lib/countries';
+import { COUNTRIES, COUNTRY_CODES, moneyFor, profile, retirementSavingsLabel, type CountryCode } from '../lib/countries';
 import { BasisLabel, CountrySelect, RetireInSelect, useCountry, useRetireIn } from './CountryPicker';
 import { HouseholdAnalysisView, HouseholdChart, HouseholdWarnings } from './HouseholdCharts';
 import StatementImport from './StatementImport';
@@ -18,9 +18,20 @@ import PlanFileActions from './PlanFileActions';
 
 type Style = 'careful' | 'balanced' | 'growth';
 const STYLE_RETURN: Record<Style, number> = { careful: 4, balanced: 5.5, growth: 7 };
+/** Typical yearly fees used when none are entered (check the fund's fact sheet). */
+const DEFAULT_FEES: Record<SavingsKind, number> = { retirement: 0.5, index: 0.2, investments: 0.2, managed: 0.9, shares: 0.1, term: 0, other: 0.5 };
+const ENGINE_KIND = {
+  index: 'index_fund', investments: 'index_fund', managed: 'managed_fund', shares: 'shares', term: 'term_deposit', other: 'other',
+} as const;
 
-type Savings = { name: string; kind: 'retirement' | 'investments' | 'term' | 'other'; amount?: number; monthly?: number; style: Style; currency?: Currency; cashOutAge?: number; cashOutPct?: number; growthPct?: number; feesPct?: number };
-type Home = { name: string; worth?: number; owe?: number; payment?: number; rent?: number; currency?: Currency; sellAge?: number; growthPct?: number; yearlyCosts?: number };
+/** 'investments' is from earlier versions and is read as an index fund. */
+type SavingsKind = 'retirement' | 'index' | 'managed' | 'shares' | 'term' | 'other' | 'investments';
+type Savings = { name: string; kind: SavingsKind; amount?: number; monthly?: number; style: Style; currency?: Currency; cashOutAge?: number; cashOutPct?: number; growthPct?: number; feesPct?: number };
+type Home = {
+  name: string; worth?: number; owe?: number; payment?: number; rent?: number; currency?: Currency; sellAge?: number; growthPct?: number; yearlyCosts?: number;
+  /** Reverse mortgage: stay in the home and release money from it */
+  rmAge?: number; rmLump?: number; rmMonthly?: number; rmRate?: number;
+};
 type OtherCost = { name: string; monthly?: number; years?: number };
 type ForeignPension = { country: CountryCode; monthly?: number; owner: 'you' | 'partner' };
 type Family = { kind: 'child' | 'parent' | 'pet'; monthly?: number; years?: number; startIn?: number };
@@ -49,20 +60,40 @@ const START: Answers = { who: 'me', savings: [], homes: [], family: [], foreignP
 
 /** Answers are kept in this browser until "Start again" or "Clear my data", so leaving the page doesn't lose them. */
 const GUIDED_KEY = 'irl:guided';
-function loadGuided(): { a: Answers; step: number } | null {
+const FULL_KEY = 'irl:full-plan';
+const FULL_AT_KEY = 'irl:full-plan-at';
+type Base = { plan: HouseholdInput; answers: Answers };
+type SavedGuided = { a: Answers; step: number; base?: Base; at: number };
+
+function loadGuided(): SavedGuided | null {
   try {
     const raw = JSON.parse(window.localStorage.getItem(GUIDED_KEY) ?? 'null');
     if (!raw || typeof raw !== 'object' || !raw.a || typeof raw.a.who !== 'string') return null;
-    return { a: { ...START, ...raw.a }, step: Number.isInteger(raw.step) ? raw.step : 0 };
+    return { a: { ...START, ...raw.a }, step: Number.isInteger(raw.step) ? raw.step : 0, base: raw.base ?? undefined, at: Number(raw.at) || 0 };
   } catch {
     return null;
   }
 }
-function saveGuided(a: Answers, step: number) {
+function saveGuided(a: Answers, step: number, base: Base | null) {
   try {
     if (a === START && step === 0) window.localStorage.removeItem(GUIDED_KEY);
-    else window.localStorage.setItem(GUIDED_KEY, JSON.stringify({ a, step }));
+    else window.localStorage.setItem(GUIDED_KEY, JSON.stringify({ a, step, base: base ?? undefined, at: Date.now() }));
   } catch { /* private browsing: answers last for this visit only */ }
+}
+/** The "All details" plan, if it was changed more recently than the guided answers. */
+function newerFullPlan(guidedAt: number): HouseholdInput | null {
+  try {
+    const at = Number(window.localStorage.getItem(FULL_AT_KEY)) || 0;
+    if (at <= guidedAt) return null;
+    const plan = JSON.parse(window.localStorage.getItem(FULL_KEY) ?? 'null');
+    return plan && plan.you ? (plan as HouseholdInput) : null;
+  } catch {
+    return null;
+  }
+}
+/** Both calculators hold one plan, so starting again clears both. */
+function forgetBothPlans() {
+  try { [GUIDED_KEY, FULL_KEY, FULL_AT_KEY].forEach((k) => window.localStorage.removeItem(k)); } catch { /* ignore */ }
 }
 
 /** Rough US dollar value of 1 unit, used only until today's rates arrive. */
@@ -96,10 +127,10 @@ export function answersToPlan(a: Answers, country: CountryCode, retireIn: Countr
     investments: savings.map((s, i) => ({
       name: saveName(s, i),
       currency: cur(s.currency),
-      kind: s.kind === 'retirement' ? (country === 'NZ' ? 'kiwisaver' : 'retirement_account') : s.kind === 'term' ? 'term_deposit' : s.kind === 'investments' ? 'shares' : 'other',
+      kind: s.kind === 'retirement' ? (country === 'NZ' ? 'kiwisaver' : 'retirement_account') : ENGINE_KIND[s.kind],
       balance: n(s.amount),
       returnPct: s.growthPct ?? (s.kind === 'term' ? 4 : STYLE_RETURN[s.style]),
-      feesPct: s.feesPct ?? (s.kind === 'term' ? 0 : 0.5),
+      feesPct: s.feesPct ?? DEFAULT_FEES[s.kind],
       monthlyContribution: n(s.monthly),
       contributionsStopAtRetirement: true,
     })),
@@ -137,6 +168,10 @@ export function answersToPlan(a: Answers, country: CountryCode, retireIn: Countr
     })),
     events: [
       ...homes.flatMap((h, i) => (n(h.sellAge) > age ? [{ name: `Sell ${homeName(h, i)}`, kind: 'sell_property' as const, atAge: n(h.sellAge), propertyName: homeName(h, i) }] : [])),
+      ...homes.flatMap((h, i) => (n(h.rmAge) > age && (n(h.rmLump) > 0 || n(h.rmMonthly) > 0) ? [{
+        name: `Reverse mortgage on ${homeName(h, i)}`, kind: 'reverse_mortgage' as const, atAge: n(h.rmAge), propertyName: homeName(h, i),
+        amount: n(h.rmLump), monthlyAmount: n(h.rmMonthly), loanRatePct: h.rmRate ?? 9,
+      }] : [])),
       ...savings.flatMap((s, i) => (n(s.cashOutAge) > age ? [{ name: `Cash out ${saveName(s, i)}`, kind: 'sell_investment' as const, atAge: n(s.cashOutAge), investmentName: saveName(s, i), sharePct: Math.min(100, Math.max(1, n(s.cashOutPct) || 100)) }] : [])),
       ...(n(a.gift) > 0 && n(a.giftAge) > age ? [{ name: 'Money you expect to receive', kind: 'money_in' as const, atAge: n(a.giftAge), amount: n(a.gift) }] : []),
       ...(n(a.bigSpend) > 0 && n(a.bigSpendAge) > age ? [{ name: 'Big purchase', kind: 'money_out' as const, atAge: n(a.bigSpendAge), amount: n(a.bigSpend) }] : []),
@@ -150,6 +185,129 @@ export function answersToPlan(a: Answers, country: CountryCode, retireIn: Countr
     .filter((x) => x !== home)
     .map((x) => ({ currency: x, rate: rates[x] ?? Number((ROUGH_USD[x] / ROUGH_USD[home]).toPrecision(4)), yearlyChangePct: 0 }));
   return plan;
+}
+
+const pos = (x: number | undefined) => (x !== undefined && Number.isFinite(x) && x > 0 ? x : undefined);
+const sumOf = (xs: number[]) => xs.reduce((s, x) => s + x, 0);
+
+/** Turns an "All details" plan into guided answers, so the guided setup shows the latest numbers. */
+export function planToAnswers(p: HouseholdInput): Answers {
+  const home = COUNTRIES[p.country ?? 'NZ'].currency as Currency;
+  const events = p.events ?? [];
+  const investments = p.investments ?? [];
+  const properties = p.properties ?? [];
+  const incomes = p.incomes ?? [];
+  const debts = p.debts ?? [];
+  const others = p.otherAssets ?? [];
+  const isHome = (cur?: Currency) => !cur || cur === home;
+  const ownerOf = (o?: string) => (o === 'partner' ? 'partner' : 'you');
+  const vehicles = others.filter((o) => o.kind === 'vehicle');
+  const valuables = others.filter((o) => o.kind !== 'vehicle');
+  const moneyIn = events.find((ev) => ev.kind === 'money_in');
+  const moneyOut = events.find((ev) => ev.kind === 'money_out');
+  return {
+    who: p.partner ? 'couple' : 'me',
+    age: p.you.currentAge, stopAge: p.you.retirementAge,
+    partnerAge: p.partner?.currentAge, partnerStopAge: p.partner?.retirementAge,
+    abroad: Boolean(p.retireIn || (p.fx ?? []).length || [...investments, ...properties, ...incomes].some((x) => !isHome(x.currency))),
+    bank: pos(p.cashOnHand),
+    savings: investments.map((i) => {
+      const cash = events.find((ev) => ev.kind === 'sell_investment' && ev.investmentName === i.name);
+      const kind: SavingsKind = i.kind === 'kiwisaver' || i.kind === 'retirement_account' ? 'retirement'
+        : i.kind === 'term_deposit' ? 'term' : i.kind === 'managed_fund' ? 'managed' : i.kind === 'shares' ? 'shares'
+        : i.kind === 'other' || i.kind === 'bonds' ? 'other' : 'index';
+      return {
+        name: i.name, kind, amount: pos(i.balance), monthly: pos(i.monthlyContribution),
+        style: (i.returnPct <= 4.75 ? 'careful' : i.returnPct <= 6.25 ? 'balanced' : 'growth') as Style,
+        growthPct: i.returnPct, feesPct: i.feesPct, currency: isHome(i.currency) ? undefined : i.currency,
+        cashOutAge: cash?.atAge, cashOutPct: cash && cash.sharePct !== undefined && cash.sharePct < 100 ? cash.sharePct : undefined,
+      };
+    }),
+    homes: properties.map((pr) => {
+      const sale = events.find((ev) => ev.kind === 'sell_property' && ev.propertyName === pr.name);
+      const rm = events.find((ev) => ev.kind === 'reverse_mortgage' && ev.propertyName === pr.name);
+      return {
+        name: pr.name, worth: pos(pr.value), owe: pos(pr.mortgageBalance), payment: pos(pr.monthlyRepayment), rent: pos(pr.monthlyNetRent),
+        currency: isHome(pr.currency) ? undefined : pr.currency, growthPct: pr.growthPct,
+        yearlyCosts: pos((pr.monthlyCosts ?? 0) * 12), sellAge: sale?.atAge,
+        rmAge: rm?.atAge, rmLump: pos(rm?.amount), rmMonthly: pos(rm?.monthlyAmount), rmRate: rm?.loanRatePct,
+      };
+    }),
+    pay: pos(sumOf(incomes.filter((i) => i.kind === 'salary' && ownerOf(i.owner) === 'you').map((i) => i.monthlyAmount))),
+    partnerPay: pos(sumOf(incomes.filter((i) => i.kind === 'salary' && i.owner === 'partner').map((i) => i.monthlyAmount))),
+    pension: pos(sumOf(incomes.filter((i) => i.kind === 'pension' && isHome(i.currency) && ownerOf(i.owner) === 'you').map((i) => i.monthlyAmount))),
+    partnerPension: pos(sumOf(incomes.filter((i) => i.kind === 'pension' && isHome(i.currency) && i.owner === 'partner').map((i) => i.monthlyAmount))),
+    foreignPensions: incomes.filter((i) => i.kind === 'pension' && !isHome(i.currency)).map((i) => ({
+      country: COUNTRY_CODES.find((k) => COUNTRIES[k].currency === i.currency) ?? (p.country ?? 'NZ'),
+      monthly: pos(i.monthlyAmount), owner: ownerOf(i.owner) as 'you' | 'partner',
+    })),
+    otherIncome: pos(sumOf(incomes.filter((i) => i.kind !== 'salary' && i.kind !== 'pension').map((i) => i.monthlyAmount))),
+    spending: pos(p.livingExpensesMonthly), spendingRetired: p.retirementLivingExpensesMonthly,
+    loanOwe: pos(sumOf(debts.map((d) => d.balance))), loanPayment: pos(sumOf(debts.map((d) => d.monthlyPayment ?? 0))),
+    family: (p.dependants ?? []).map((d) => ({ kind: d.kind === 'parent' || d.kind === 'pet' ? d.kind : 'child', monthly: pos(d.monthlyCost), years: d.years, startIn: pos(d.startInYears) })),
+    otherCosts: (p.otherExpenses ?? []).map((x) => ({ name: x.name, monthly: pos(x.monthlyAmount), years: x.years })),
+    car: pos(sumOf(vehicles.map((v) => v.value))), carLossPct: vehicles[0]?.changePct !== undefined ? -vehicles[0].changePct! : undefined,
+    valuables: pos(sumOf(valuables.map((v) => v.value))), valuablesChangePct: valuables[0]?.changePct,
+    gift: pos(moneyIn?.amount), giftAge: moneyIn?.atAge, bigSpend: pos(moneyOut?.amount), bigSpendAge: moneyOut?.atAge,
+    goal: pos(p.goal?.targetNetWorth), inflationPct: p.inflationPct,
+  };
+}
+
+/**
+ * Builds the plan from the guided answers on top of an "All details" plan.
+ * Sections the person hasn't changed in the guided steps are kept exactly as
+ * they were (tax settings, mortgage rates, owners, extra debts and so on);
+ * changed sections take the guided answers, keeping hidden details by name.
+ */
+export function mergeWithBase(base: HouseholdInput, baseAnswers: Answers, a: Answers, fresh: HouseholdInput): HouseholdInput {
+  const same = (keys: (keyof Answers)[]) => keys.every((k) => JSON.stringify(a[k] ?? null) === JSON.stringify(baseAnswers[k] ?? null));
+  const byName = <T extends { name: string }>(items: T[] | undefined, name: string) => (items ?? []).find((x) => x.name === name);
+  const bEvents = base.events ?? [];
+  const fEvents = fresh.events ?? [];
+  const pick = (from: HouseholdInput['events'], kinds: string[]) => (from ?? []).filter((ev) => kinds.includes(ev.kind));
+  const keepInv = same(['savings']);
+  const keepHomes = same(['homes']);
+  const merged: HouseholdInput = {
+    ...base,
+    country: fresh.country,
+    retireIn: fresh.retireIn,
+    you: same(['age', 'stopAge']) ? base.you : fresh.you,
+    partner: same(['who', 'partnerAge', 'partnerStopAge']) ? base.partner : fresh.partner,
+    cashOnHand: same(['bank']) ? base.cashOnHand : fresh.cashOnHand,
+    investments: keepInv ? base.investments : (fresh.investments ?? []).map((f) => {
+      const b = byName(base.investments, f.name);
+      return b ? { ...b, balance: f.balance, monthlyContribution: f.monthlyContribution, returnPct: f.returnPct, feesPct: f.feesPct, currency: f.currency } : f;
+    }),
+    properties: keepHomes ? base.properties : (fresh.properties ?? []).map((f) => {
+      const b = byName(base.properties, f.name);
+      return b ? { ...b, value: f.value, mortgageBalance: f.mortgageBalance, monthlyRepayment: f.monthlyRepayment, monthlyNetRent: f.monthlyNetRent, monthlyCosts: f.monthlyCosts, growthPct: f.growthPct, currency: f.currency } : f;
+    }),
+    incomes: same(['pay', 'partnerPay', 'pension', 'partnerPension', 'otherIncome', 'foreignPensions']) ? base.incomes : fresh.incomes,
+    livingExpensesMonthly: same(['spending']) ? base.livingExpensesMonthly : fresh.livingExpensesMonthly,
+    retirementLivingExpensesMonthly: same(['spendingRetired']) ? base.retirementLivingExpensesMonthly : fresh.retirementLivingExpensesMonthly,
+    debts: same(['loanOwe', 'loanPayment']) ? base.debts : fresh.debts,
+    dependants: same(['family']) ? base.dependants : fresh.dependants,
+    otherExpenses: same(['otherCosts']) ? base.otherExpenses : fresh.otherExpenses,
+    otherAssets: same(['car', 'carLossPct', 'valuables', 'valuablesChangePct']) ? base.otherAssets : fresh.otherAssets,
+    events: [
+      ...pick(same(['gift', 'giftAge', 'bigSpend', 'bigSpendAge']) ? bEvents : fEvents, ['money_in', 'money_out']),
+      ...pick(keepHomes ? bEvents : fEvents, ['sell_property', 'reverse_mortgage']),
+      ...pick(keepInv ? bEvents : fEvents, ['sell_investment']),
+    ].map((ev) => {
+      const b = bEvents.find((x) => x.kind === ev.kind && x.name === ev.name);
+      return b ? { ...b, ...ev } : ev; // keep selling costs, replacement home and other hidden settings
+    }),
+    goal: same(['goal']) ? base.goal : fresh.goal,
+    inflationPct: same(['inflationPct']) ? base.inflationPct : fresh.inflationPct,
+    contributionsFromOutsideIncome: false,
+  };
+  // An exchange rate for every currency now used
+  const home = COUNTRIES[merged.country ?? 'NZ'].currency as Currency;
+  const known = new Map([...(base.fx ?? []), ...(fresh.fx ?? [])].map((f) => [f.currency, f]));
+  merged.fx = usedCurrencies({ ...merged, investments: merged.investments ?? [], properties: merged.properties ?? [], otherAssets: merged.otherAssets ?? [], debts: merged.debts ?? [], incomes: merged.incomes ?? [], dependants: merged.dependants ?? [], otherExpenses: merged.otherExpenses ?? [], events: merged.events ?? [] } as Parameters<typeof usedCurrencies>[0])
+    .filter((c) => c !== home)
+    .map((c) => known.get(c) ?? { currency: c, rate: Number((ROUGH_USD[c] / ROUGH_USD[home]).toPrecision(4)), yearlyChangePct: 0 });
+  return merged;
 }
 
 /** A labelled number field with a one-line explanation. Blank means "none". */
@@ -236,16 +394,30 @@ export default function PlannerWizard({ onPlanChange }: { onPlanChange?: (plan: 
   const [a, setA] = useState<Answers>(START);
   const [step, setStep] = useState(0);
   const [restored, setRestored] = useState(false);
-  // Bring back earlier answers when someone returns to the page
+  const [base, setBase] = useState<Base | null>(null);
+  const [synced, setSynced] = useState(false);
+  // Bring back earlier answers, or the newer "All details" plan if it was changed since
   useEffect(() => {
     const saved = loadGuided();
-    if (saved) { setA(saved.a); setStep(saved.step); }
+    const full = newerFullPlan(saved?.at ?? 0);
+    if (full) {
+      const answers = planToAnswers(full);
+      setA(answers);
+      setBase({ plan: full, answers });
+      setStep(saved ? Math.max(1, saved.step) : 1);
+      setSynced(true);
+    } else if (saved) {
+      setA(saved.a);
+      setStep(saved.step);
+      if (saved.base) setBase(saved.base);
+    }
     setRestored(true);
   }, []);
-  useEffect(() => { if (restored) saveGuided(a, step); }, [a, step, restored]);
+  useEffect(() => { if (restored) saveGuided(a, step, base); }, [a, step, base, restored]);
+  const resetAll = () => { forgetBothPlans(); setBase(null); setSynced(false); setA(START); setStep(0); };
   // Answers cleared from another page or tab
   useEffect(() => {
-    const cleared = () => { setA(START); setStep(0); };
+    const cleared = () => { setBase(null); setA(START); setStep(0); };
     window.addEventListener('irl:saved-plans-cleared', cleared);
     return () => window.removeEventListener('irl:saved-plans-cleared', cleared);
   }, []);
@@ -256,7 +428,10 @@ export default function PlannerWizard({ onPlanChange }: { onPlanChange?: (plan: 
   const couple = a.who === 'couple';
   const homeCur = cur as Currency;
   const [rates, setRates] = useState<Partial<Record<Currency, number>>>({});
-  const livePlan = useMemo(() => answersToPlan(a, country, retireIn, rates), [a, country, retireIn, rates]);
+  const livePlan = useMemo(() => {
+    const fresh = answersToPlan(a, country, retireIn, rates);
+    return base ? mergeWithBase(base.plan, base.answers, a, fresh) : fresh;
+  }, [a, country, retireIn, rates, base]);
   const touched = a !== START;
 
   // Share the plan so switching to "All details" keeps every answer
@@ -325,7 +500,7 @@ export default function PlannerWizard({ onPlanChange }: { onPlanChange?: (plan: 
       why: 'Everyday and savings accounts: the money you could use for an emergency.',
       body: (
         <>
-          <Field id="wiz-bank" label="How much is in your bank accounts?" help="Add up everyday and savings accounts. Leave out KiwiSaver, retirement savings and investments; they come next." value={a.bank} onChange={(v) => set({ bank: v })} prefix={cur} />
+          <Field id="wiz-bank" label="How much is in your bank accounts?" help={`Add up everyday and savings accounts. Leave out ${retirementSavingsLabel(country)} and investments; they come next.`} value={a.bank} onChange={(v) => set({ bank: v })} prefix={cur} />
           <StatementImport money={money} onApply={(s) => set({
             bank: s.bank ?? a.bank, pay: s.pay ?? a.pay, spending: s.spending ?? a.spending,
           })} />
@@ -334,7 +509,7 @@ export default function PlannerWizard({ onPlanChange }: { onPlanChange?: (plan: 
     },
     {
       icon: '🌱', title: 'Savings and investments',
-      why: `Money set aside to grow: ${c.retirementAccount.name}, shares or funds, term deposits.`,
+      why: `Money set aside to grow: ${retirementSavingsLabel(country)}, index funds, managed funds, shares or term deposits.`,
       optional: true,
       body: (
         <>
@@ -342,8 +517,16 @@ export default function PlannerWizard({ onPlanChange }: { onPlanChange?: (plan: 
             const upd = (p: Partial<Savings>) => set({ savings: a.savings.map((x, j) => (j === i ? { ...x, ...p } : x)) });
             return (
               <Card key={i} title={s.name || 'Savings'} onRemove={() => set({ savings: a.savings.filter((_, j) => j !== i) })}>
-                <Choice name={`wiz-kind-${i}`} value={s.kind} onChange={(v) => upd({ kind: v, name: v === 'retirement' ? c.retirementAccount.name : v === 'investments' ? 'Shares or funds' : v === 'term' ? 'Term deposit' : 'Other savings' })}
-                  options={[['retirement', c.retirementAccount.name, 'Retirement savings'], ['investments', 'Shares or funds'], ['term', 'Term deposit'], ['other', 'Something else']]} />
+                <Choice name={`wiz-kind-${i}`} value={s.kind === 'investments' ? 'index' : s.kind}
+                  onChange={(v) => upd({ kind: v, name: { retirement: retirementSavingsLabel(country), index: 'Index fund', managed: 'Managed fund', shares: 'Shares', term: 'Term deposit', other: 'Other savings', investments: 'Index fund' }[v] })}
+                  options={[
+                    ['retirement', retirementSavingsLabel(country), 'Retirement savings'],
+                    ['index', 'Index funds / ETFs', 'Follow a whole market, low fees'],
+                    ['managed', 'Managed funds', 'A manager picks investments'],
+                    ['shares', 'Individual shares', 'Shares in single companies'],
+                    ['term', 'Term deposit', 'Fixed interest at a bank'],
+                    ['other', 'Something else'],
+                  ]} />
                 {a.abroad && <CurrencyPick id={`wiz-savc-${i}`} label="Which currency is it in?" value={s.currency} home={homeCur} onChange={(v) => upd({ currency: v })} />}
                 <div className="wizard-pair">
                   <Field id={`wiz-sav-${i}`} label="How much is in it now?" value={s.amount} onChange={(v) => upd({ amount: v })} prefix={a.abroad && s.currency ? s.currency : cur} />
@@ -366,13 +549,13 @@ export default function PlannerWizard({ onPlanChange }: { onPlanChange?: (plan: 
                     <Field id={`wiz-savg-${i}`} label="How much do you expect it to grow each year?" help="Before fees. Leave blank to use the choice above."
                       value={s.growthPct} onChange={(v) => upd({ growthPct: v })} suffix="% a year" placeholder={String(s.kind === 'term' ? 4 : STYLE_RETURN[s.style])} />
                     <Field id={`wiz-savf-${i}`} label="Yearly fees and costs" help="Management and platform fees, from your fund's fact sheet. These slowly eat into growth."
-                      value={s.feesPct} onChange={(v) => upd({ feesPct: v })} suffix="% a year" placeholder={s.kind === 'term' ? '0' : '0.5'} />
+                      value={s.feesPct} onChange={(v) => upd({ feesPct: v })} suffix="% a year" placeholder={String(DEFAULT_FEES[s.kind])} />
                   </div>
                 </More>
               </Card>
             );
           })}
-          <button type="button" className="wizard-add" onClick={() => set({ savings: [...a.savings, { name: c.retirementAccount.name, kind: 'retirement', style: 'balanced' }] })}>
+          <button type="button" className="wizard-add" onClick={() => set({ savings: [...a.savings, { name: retirementSavingsLabel(country), kind: 'retirement', style: 'balanced' }] })}>
             + Add savings or investments
           </button>
         </>
@@ -403,6 +586,20 @@ export default function PlannerWizard({ onPlanChange }: { onPlanChange?: (plan: 
                   <Field id={`wiz-hg-${i}`} label="How much might its value grow each year?" help="Leave blank for 3%, a common long-run assumption."
                     value={h.growthPct} onChange={(v) => upd({ growthPct: v })} suffix="% a year" placeholder="3" />
                 </div>
+                <More label="Stay in the home and release money from it instead (reverse mortgage)">
+                  <p className="wizard-help">
+                    A reverse mortgage lets you borrow against your home without making repayments. You keep living there; interest is added to
+                    the loan each year, and everything is repaid when the home is sold. Usually available from about age 60.
+                  </p>
+                  <div className="wizard-pair">
+                    <Field id={`wiz-rma-${i}`} label="From what age?" value={h.rmAge} onChange={(v) => upd({ rmAge: v })} suffix="years" placeholder="e.g. 70" />
+                    <Field id={`wiz-rmr-${i}`} label="Interest rate" help="Check current rates with providers." value={h.rmRate} onChange={(v) => upd({ rmRate: v === undefined ? undefined : Math.min(25, v) })} suffix="% a year" placeholder="9" />
+                  </div>
+                  <div className="wizard-pair">
+                    <Field id={`wiz-rml-${i}`} label="A lump sum" value={h.rmLump} onChange={(v) => upd({ rmLump: v })} prefix={cur} />
+                    <Field id={`wiz-rmm-${i}`} label="And/or a regular payment each month" value={h.rmMonthly} onChange={(v) => upd({ rmMonthly: v })} prefix={cur} />
+                  </div>
+                </More>
                 <Field id={`wiz-hs-${i}`} label="Planning to sell it? At what age?" help="Optional. The money (after the mortgage and selling costs) goes into your savings." value={h.sellAge} onChange={(v) => upd({ sellAge: v })} suffix="years" />
               </Card>
             );
@@ -603,11 +800,11 @@ export default function PlannerWizard({ onPlanChange }: { onPlanChange?: (plan: 
         )}
         <div className="wizard-nav">
           <button type="button" className="wizard-button is-quiet" onClick={() => go(0)}>← Change my answers</button>
-          <button type="button" className="start-again" onClick={() => { if (window.confirm('Clear all your answers and start again?')) { setA(START); go(0); } }}>🧹 Start again</button>
+          <button type="button" className="start-again" onClick={() => { if (window.confirm('Clear all your answers and start again?')) { resetAll(); go(0); } }}>🧹 Start again</button>
           {plan && <button type="button" className="wizard-button" onClick={() => openInAllDetails(plan)}>See every detail and fine-tune</button>}
         </div>
         <PlanFileActions plan={plan} onOpen={openInAllDetails} />
-        <p className="wizard-privacy">🔒 Worked out on this device. Nothing was sent to us. <ClearDeviceData label="Clear my answers from this device" onCleared={() => { setA(START); go(0); }} /></p>
+        <p className="wizard-privacy">🔒 Worked out on this device. Nothing was sent to us. <ClearDeviceData label="Clear my answers from this device" onCleared={() => { resetAll(); go(0); }} /></p>
         <p className="disclaimer-note">These are illustrations based on your answers, not predictions or financial advice.</p>
       </section>
     );
@@ -621,7 +818,7 @@ export default function PlannerWizard({ onPlanChange }: { onPlanChange?: (plan: 
       <div className="wizard-progress" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Progress"><span style={{ width: `${Math.max(4, pct)}%` }} /></div>
       <div className="wizard-count-row">
         <p className="wizard-count">Step {step + 1} of {last}</p>
-        <button type="button" className="start-again" onClick={() => { if (window.confirm('Clear all your answers and start again?')) { setA(START); go(0); } }}>🧹 Start again</button>
+        <button type="button" className="start-again" onClick={() => { if (window.confirm('Clear all your answers and start again?')) { resetAll(); go(0); } }}>🧹 Start again</button>
       </div>
       <div className="wizard-step-head">
         <span className="wizard-icon" aria-hidden="true">{s.icon}</span>
@@ -630,6 +827,12 @@ export default function PlannerWizard({ onPlanChange }: { onPlanChange?: (plan: 
           <p>{s.why}</p>
         </div>
       </div>
+      {synced && step > 0 && (
+        <p className="wizard-synced" role="status">
+          ✓ Updated with the changes you made in &quot;All details&quot;. Anything the guided steps don&apos;t ask about is kept as you set it there.
+          <button type="button" className="link-button" onClick={() => setSynced(false)}>OK</button>
+        </p>
+      )}
       <div className="wizard-body">{s.body}</div>
       <div className="wizard-nav">
         {step > 0 ? <button type="button" className="wizard-button is-quiet" onClick={() => go(step - 1)}>← Back</button> : <span />}
@@ -640,7 +843,7 @@ export default function PlannerWizard({ onPlanChange }: { onPlanChange?: (plan: 
           </button>
         </div>
       </div>
-      <p className="wizard-privacy">🔒 Your answers stay on this device, kept until you press Start again or Clear. <ClearDeviceData label="Clear my answers" onCleared={() => { setA(START); go(0); }} /></p>
+      <p className="wizard-privacy">🔒 Your answers stay on this device, kept until you press Start again or Clear. <ClearDeviceData label="Clear my answers" onCleared={() => { resetAll(); go(0); }} /></p>
     </section>
     <PlanPreview answers={a} plan={ageOk ? livePlan : null} money={money} onFinish={() => go(last)} cashflowKnown={a.pay !== undefined || a.partnerPay !== undefined || a.spending !== undefined} />
     </div>

@@ -145,3 +145,19 @@ export function currencyCountryIn(text: string): CountryCode | null {
   const found = CURRENCY_PATTERNS.filter(([, re]) => re.test(text)).map(([c]) => c);
   return found.length === 1 ? found[0] : null;
 }
+
+/** What people call retirement savings in each country, for labels. */
+export function retirementSavingsLabel(code: CountryCode | undefined): string {
+  return { NZ: 'KiwiSaver / Superannuation', AU: 'Superannuation', US: '401(k) / IRA', UK: 'Workplace pension / SIPP', PH: 'PERA / retirement fund' }[code ?? DEFAULT_COUNTRY];
+}
+
+/** Topics for the chat's question box hint, by country. */
+export function questionHint(code: CountryCode | undefined): string {
+  return {
+    NZ: 'Ask about ETFs, KiwiSaver, FIF tax or your retirement numbers…',
+    AU: 'Ask about ETFs, super, index funds or your retirement numbers…',
+    US: 'Ask about ETFs, 401(k)s, IRAs or your retirement numbers…',
+    UK: 'Ask about ETFs, ISAs, pensions or your retirement numbers…',
+    PH: 'Ask about funds, PERA, SSS or your retirement numbers…',
+  }[code ?? DEFAULT_COUNTRY];
+}

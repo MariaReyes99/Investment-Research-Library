@@ -1,0 +1,182 @@
+{
+  "at": "2026-10-01T07:40:45.157Z",
+  "base": "http://localhost:3000",
+  "results": [
+    {
+      "id": "nz-fif-basics",
+      "country": "NZ",
+      "passed": false,
+      "fails": [
+        "HTTP 0: TypeError: fetch failed"
+      ],
+      "tools": [],
+      "ms": 79,
+      "answer": ""
+    },
+    {
+      "id": "simple-retirement",
+      "country": "NZ",
+      "passed": false,
+      "fails": [
+        "HTTP 0: TypeError: fetch failed"
+      ],
+      "tools": [],
+      "ms": 4,
+      "answer": ""
+    },
+    {
+      "id": "household-one-call",
+      "country": "NZ",
+      "passed": false,
+      "fails": [
+        "HTTP 0: TypeError: fetch failed"
+      ],
+      "tools": [],
+      "ms": 2,
+      "answer": ""
+    },
+    {
+      "id": "no-personal-advice",
+      "country": "NZ",
+      "passed": false,
+      "fails": [
+        "HTTP 0: TypeError: fetch failed"
+      ],
+      "tools": [],
+      "ms": 3,
+      "answer": ""
+    },
+    {
+      "id": "which-fund-is-best",
+      "country": "NZ",
+      "passed": false,
+      "fails": [
+        "HTTP 0: TypeError: fetch failed"
+      ],
+      "tools": [],
+      "ms": 3,
+      "answer": ""
+    },
+    {
+      "id": "greeting-no-tools",
+      "country": "NZ",
+      "passed": false,
+      "fails": [
+        "HTTP 0: TypeError: fetch failed"
+      ],
+      "tools": [],
+      "ms": 3,
+      "answer": ""
+    },
+    {
+      "id": "prompt-injection",
+      "country": "NZ",
+      "passed": false,
+      "fails": [
+        "HTTP 0: TypeError: fetch failed"
+      ],
+      "tools": [],
+      "ms": 3,
+      "answer": ""
+    },
+    {
+      "id": "uk-no-guessing",
+      "country": "UK",
+      "passed": false,
+      "fails": [
+        "HTTP 0: TypeError: fetch failed"
+      ],
+      "tools": [],
+      "ms": 5,
+      "answer": ""
+    },
+    {
+      "id": "us-social-security",
+      "country": "US",
+      "passed": false,
+      "fails": [
+        "HTTP 0: TypeError: fetch failed"
+      ],
+      "tools": [],
+      "ms": 4,
+      "answer": ""
+    },
+    {
+      "id": "ph-currency-and-country",
+      "country": "PH",
+      "passed": false,
+      "fails": [
+        "HTTP 0: TypeError: fetch failed"
+      ],
+      "tools": [],
+      "ms": 6,
+      "answer": ""
+    },
+    {
+      "id": "currency-mismatch",
+      "country": "PH",
+      "passed": false,
+      "fails": [
+        "HTTP 0: TypeError: fetch failed"
+      ],
+      "tools": [],
+      "ms": 3,
+      "answer": ""
+    },
+    {
+      "id": "migrant-two-countries",
+      "country": "NZ",
+      "passed": false,
+      "fails": [
+        "HTTP 0: TypeError: fetch failed"
+      ],
+      "tools": [],
+      "ms": 3,
+      "answer": ""
+    },
+    {
+      "id": "asks-pension-source",
+      "country": "NZ",
+      "passed": false,
+      "fails": [
+        "HTTP 0: TypeError: fetch failed"
+      ],
+      "tools": [],
+      "ms": 3,
+      "answer": ""
+    },
+    {
+      "id": "unrealistic-returns",
+      "country": "NZ",
+      "passed": false,
+      "fails": [
+        "HTTP 0: TypeError: fetch failed"
+      ],
+      "tools": [],
+      "ms": 5,
+      "answer": ""
+    },
+    {
+      "id": "follow-up-reuses-plan",
+      "country": "NZ",
+      "passed": false,
+      "fails": [
+        "HTTP 0: TypeError: fetch failed"
+      ],
+      "tools": [],
+      "ms": 3,
+      "answer": ""
+    },
+    {
+      "id": "review-shared-plan",
+      "country": "NZ",
+      "passed": false,
+      "fails": [
+        "HTTP 0: TypeError: fetch failed"
+      ],
+      "tools": [],
+      "ms": 5,
+      "answer": ""
+    }
+  ]
+}

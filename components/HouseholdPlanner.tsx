@@ -8,7 +8,7 @@ import type { ZodIssue } from 'zod';
 import { CURRENCIES, HouseholdInputSchema, countryOfCurrency, projectHousehold, retirementCurrency, TAX_TREATMENTS, usedCurrencies, type Currency, type Household, type HouseholdResult } from '../lib/finance/household';
 import { planFromHash } from '../lib/finance/householdLink';
 import { analyseHousehold } from '../lib/finance/householdAnalysis';
-import { COUNTRIES, COUNTRY_CODES, moneyFor, profile, type CountryCode } from '../lib/countries';
+import { COUNTRIES, COUNTRY_CODES, moneyFor, profile, retirementSavingsLabel, type CountryCode } from '../lib/countries';
 import { HouseholdAnalysisView, HouseholdChart, HouseholdComparison, HouseholdHeadline, HouseholdMilestones, HouseholdWarnings } from './HouseholdCharts';
 import { BasisLabel, CountrySelect, RetireInSelect, useCountry, useRetireIn } from './CountryPicker';
 import SavedPlans from './SavedPlans';
@@ -59,9 +59,10 @@ function defaultPlan(country: CountryCode): Draft {
 }
 
 const investmentKinds = (country: CountryCode) => ({
-  ...(country === 'NZ' ? { kiwisaver: 'KiwiSaver' } : {}),
-  retirement_account: country === 'NZ' ? 'Other retirement account' : profile(country).retirementAccount.name,
-  shares: 'Shares / ETFs', managed_fund: 'Managed fund', term_deposit: 'Term deposit', bonds: 'Bonds', other: 'Other',
+  ...(country === 'NZ' ? { kiwisaver: 'KiwiSaver / Superannuation' } : {}),
+  retirement_account: country === 'NZ' ? 'Other retirement fund' : retirementSavingsLabel(country),
+  index_fund: 'Index fund / ETF', managed_fund: 'Managed fund', shares: 'Individual shares',
+  term_deposit: 'Term deposit', bonds: 'Bonds', other: 'Other',
 }) as Record<Item<'investments'>['kind'], string>;
 const TAX_LABELS: Record<TaxTreatment, string> = {
   returns_after_tax: 'Return entered is after tax',
@@ -75,19 +76,19 @@ const incomeKinds = (country: CountryCode) => ({
   pension: `Pension / ${profile(country).pension.name}`, annuity: 'Annuity', other: 'Other',
 });
 const DEPENDANT_KINDS = { child: 'Child', parent: 'Parent', pet: 'Pet', other: 'Other' };
-const EVENT_KINDS = { money_in: 'Money in (inheritance, lump sum)', money_out: 'Money out (renovation, car, wedding)', sell_property: 'Sell or downsize a property', sell_investment: 'Cash out an investment' };
+const EVENT_KINDS = { money_in: 'Money in (inheritance, lump sum)', money_out: 'Money out (renovation, car, wedding)', sell_property: 'Sell or downsize a property', sell_investment: 'Cash out an investment', reverse_mortgage: 'Reverse mortgage on a property' };
 const WITHDRAWAL_KINDS = { needs: 'Spend my retirement living costs', percent: 'Spend a fixed % of savings each year', guardrails: 'Flexible (guardrails)' };
 const OWNERS: Record<Owner, string> = { you: 'You', partner: 'Partner', joint: 'Joint' };
 
 const NEW_ITEMS: { [K in ListKey]: (country: CountryCode) => Item<K> } = {
-  investments: () => ({ name: 'Investment', kind: 'shares', owner: 'you', balance: 0, returnPct: 6, feesPct: 0.3, monthlyContribution: 0, contributionsStopAtRetirement: true, taxTreatment: 'returns_after_tax', taxRatePct: 0 }),
+  investments: () => ({ name: 'Index fund', kind: 'index_fund', owner: 'you', balance: 0, returnPct: 6, feesPct: 0.2, monthlyContribution: 0, contributionsStopAtRetirement: true, taxTreatment: 'returns_after_tax', taxRatePct: 0 }),
   properties: () => ({ name: 'Property', value: 0, growthPct: 3, mortgageBalance: 0, mortgageRatePct: 5.5, monthlyRepayment: 0, monthlyNetRent: 0, monthlyCosts: 0 }),
   otherAssets: () => ({ name: 'Asset', kind: 'other', value: 0 }),
   debts: () => ({ name: 'Loan', balance: 0, ratePct: 8, monthlyPayment: 0 }),
   incomes: () => ({ name: 'Dividends', kind: 'dividends', owner: 'you', monthlyAmount: 0, risesWithInflation: true }),
   dependants: () => ({ name: 'Child', kind: 'child', monthlyCost: 800, years: 10, startInYears: 0 }),
   otherExpenses: () => ({ name: 'Expense', monthlyAmount: 0, startInYears: 0 }),
-  events: () => ({ name: 'Inheritance', kind: 'money_in', atAge: 70, amount: 0, replacementValue: 0, sellingCostsPct: 3, sharePct: 100 }),
+  events: () => ({ name: 'Inheritance', kind: 'money_in', atAge: 70, amount: 0, replacementValue: 0, sellingCostsPct: 3, sharePct: 100, monthlyAmount: 0, loanRatePct: 9 }),
   compare: () => ({ label: 'Assumption', investmentReturnPct: 6 }),
 };
 
@@ -259,6 +260,7 @@ function YearTable({ result }: { result: HouseholdResult }) {
   const money = moneyFor(result.inputs.country);
   const rows = result.scenarios[1].series.slice(1);
   const anyUnmet = rows.some((p) => p.unmet > 0.5);
+  const anyReverse = rows.some((p) => p.reverseMortgage > 0.5);
   return (
     <details className="calc-assumptions">
       <summary>Year by year (expected case)</summary>
@@ -267,7 +269,7 @@ function YearTable({ result }: { result: HouseholdResult }) {
           <thead>
             <tr>
               <th scope="col">Age during the year</th><th scope="col">Income</th><th scope="col">Spending</th><th scope="col">Loan repayments</th>
-              <th scope="col">Investing</th><th scope="col">Tax on withdrawals</th><th scope="col">One-off events</th><th scope="col">Income minus outgoings</th>{anyUnmet && <th scope="col">Not covered</th>}<th scope="col">Cash and investments at year end</th><th scope="col">Net worth at year end</th>
+              <th scope="col">Investing</th><th scope="col">Tax on withdrawals</th><th scope="col">One-off events</th><th scope="col">Income minus outgoings</th>{anyUnmet && <th scope="col">Not covered</th>}{anyReverse && <th scope="col">Reverse mortgage owed</th>}<th scope="col">Cash and investments at year end</th><th scope="col">Net worth at year end</th>
             </tr>
           </thead>
           <tbody>
@@ -282,6 +284,7 @@ function YearTable({ result }: { result: HouseholdResult }) {
                 <td>{money(p.events)}</td>
                 <td className={p.net < 0 ? 'is-drawn' : undefined}>{money(p.net)}</td>
                 {anyUnmet && <td className={p.unmet > 0.5 ? 'is-debt' : undefined}>{p.unmet > 0.5 ? money(p.unmet) : '—'}</td>}
+                {anyReverse && <td className={p.reverseMortgage > 0.5 ? 'is-debt' : undefined}>{p.reverseMortgage > 0.5 ? money(p.reverseMortgage) : '—'}</td>}
                 <td>{money(p.liquid)}</td>
                 <td className="is-expected">{money(p.netWorth)}</td>
               </tr>
@@ -293,6 +296,7 @@ function YearTable({ result }: { result: HouseholdResult }) {
         Each row is one year of your life: income and spending during that year, and what you own at the end of it, in today&apos;s money.
         A negative &quot;income minus outgoings&quot; is paid from your cash and investments; one-off events such as a sale go into them.
         {anyUnmet ? ' "Not covered" shows spending your savings could no longer pay for.' : ' Your savings cover every year.'}
+        {anyReverse && ' "Reverse mortgage owed" includes interest added each year, so it keeps growing even when you stop receiving payments.'}
       </p>
     </details>
   );
@@ -343,7 +347,11 @@ export default function HouseholdPlanner() {
   }, []);
   useEffect(() => {
     if (!restored || !touched.current) return;
-    try { window.localStorage.setItem(FULL_PLAN_KEY, JSON.stringify(plan)); } catch { /* private browsing */ }
+    try {
+      window.localStorage.setItem(FULL_PLAN_KEY, JSON.stringify(plan));
+      // Lets the guided setup know this plan is the newest
+      window.localStorage.setItem('irl:full-plan-at', String(Date.now()));
+    } catch { /* private browsing */ }
   }, [plan, restored]);
 
   // Follow the saved country of residence until the person starts editing.
@@ -408,7 +416,7 @@ export default function HouseholdPlanner() {
         events: [...p.events, {
           name: kind === 'sell_property' ? `Sell ${name}` : `Cash out ${name}`, kind, atAge: patch.atAge, amount: 0,
           propertyName: kind === 'sell_property' ? name : undefined, investmentName: kind === 'sell_investment' ? name : undefined,
-          sharePct: patch.sharePct ?? 100, replacementValue: 0, sellingCostsPct: 3,
+          sharePct: patch.sharePct ?? 100, replacementValue: 0, sellingCostsPct: 3, monthlyAmount: 0, loanRatePct: 9,
         }],
       };
     });
@@ -458,7 +466,8 @@ export default function HouseholdPlanner() {
   /** Empties every field on the screen and starts a fresh plan. */
   const startAgain = (ask = true) => {
     if (ask && !window.confirm('Clear everything on this screen and start again?')) return;
-    try { window.localStorage.removeItem(FULL_PLAN_KEY); } catch { /* ignore */ }
+    // Both calculators hold one plan, so starting again clears both
+    try { [FULL_PLAN_KEY, 'irl:full-plan-at', 'irl:guided'].forEach((k) => window.localStorage.removeItem(k)); } catch { /* ignore */ }
     touched.current = false;
     lastGood.current = null;
     setLoadedFromChat(false);
@@ -521,7 +530,7 @@ export default function HouseholdPlanner() {
           </div>
         </Section>
 
-        <Section legend="Investments" note={`${c.retirementAccount.name}, shares, funds and term deposits. Returns are illustrations you can change, not provider performance.`}>
+        <Section legend="Investments" note={`${retirementSavingsLabel(plan.country)}, index funds and ETFs, managed funds, shares and term deposits. Returns are illustrations you can change, not provider performance.`}>
           <div className="asset-list">
             {plan.investments.map((inv, i) => (
               <Card key={i} title={inv.name || 'Investment'} onRemove={() => removeItem('investments', i)}>
@@ -583,7 +592,7 @@ export default function HouseholdPlanner() {
                   hint="Rates, insurance, repairs and upkeep. Stops if you sell. Don't count these in living costs too." />
                 <Num id={`prop-${i}-sell`} label="Plan to sell at age" optional value={linkedEvent('sell_property', p.name)?.atAge}
                   onChange={(v) => setLinkedEvent('sell_property', p.name, { atAge: v })}
-                  hint="Optional. Leave blank to keep it. Downsizing or selling costs: see One-off events." />
+                  hint="Optional. Leave blank to keep it. To stay in the home and release some of its value instead, add a reverse mortgage under One-off events." />
               </Card>
             ))}
           </div>
@@ -718,17 +727,31 @@ export default function HouseholdPlanner() {
                 <Text id={`ev-${i}-name`} label="Name" value={ev.name} onChange={(v) => setItem('events', i, { name: v })} />
                 <Pick id={`ev-${i}-kind`} label="Type" value={ev.kind} options={EVENT_KINDS}
                   onChange={(v) => {
-                    const propertyName = v === 'sell_property' ? ev.propertyName ?? propertyNames[0] : ev.propertyName;
+                    const propertyName = v === 'sell_property' || v === 'reverse_mortgage' ? ev.propertyName ?? propertyNames[0] : ev.propertyName;
                     const investmentName = v === 'sell_investment' ? ev.investmentName ?? plan.investments[0]?.name : ev.investmentName;
                     // Rename events that still have a default name
-                    const defaults = ['Inheritance', 'Renovation', 'Event', ...propertyNames.map((n) => `Sell ${n}`), ...plan.investments.map((x) => `Cash out ${x.name}`)];
+                    const defaults = ['Inheritance', 'Renovation', 'Event', ...propertyNames.map((n) => `Sell ${n}`), ...propertyNames.map((n) => `Reverse mortgage on ${n}`), ...plan.investments.map((x) => `Cash out ${x.name}`)];
                     const name = defaults.includes(ev.name)
-                      ? v === 'money_in' ? 'Inheritance' : v === 'money_out' ? 'Renovation' : v === 'sell_investment' ? `Cash out ${investmentName ?? 'investment'}` : `Sell ${propertyName ?? 'property'}`
+                      ? v === 'money_in' ? 'Inheritance' : v === 'money_out' ? 'Renovation' : v === 'sell_investment' ? `Cash out ${investmentName ?? 'investment'}` : v === 'reverse_mortgage' ? `Reverse mortgage on ${propertyName ?? propertyNames[0] ?? 'home'}` : `Sell ${propertyName ?? 'property'}`
                       : ev.name;
                     setItem('events', i, { kind: v, propertyName, investmentName, name });
                   }} />
                 <Num id={`ev-${i}-age`} label="At your age" value={ev.atAge} onChange={(v) => setItem('events', i, { atAge: v as number })} />
-                {ev.kind === 'sell_investment' ? (
+                {ev.kind === 'reverse_mortgage' ? (
+                  <>
+                    {propertyNames.length > 0 ? (
+                      <Pick id={`ev-${i}-rmprop`} label="Property" value={ev.propertyName ?? propertyNames[0]}
+                        options={Object.fromEntries(propertyNames.map((n) => [n, n]))} onChange={(v) => setItem('events', i, { propertyName: v })} />
+                    ) : <p className="asset-editor-note">Add a property first.</p>}
+                    <div className="planner-pair">
+                      <Num id={`ev-${i}-rmlump`} label="Lump sum" unit={c.currency} step={5000} value={ev.amount} onChange={(v) => setItem('events', i, { amount: v as number })} hint="0 if none" />
+                      <Num id={`ev-${i}-rmmonth`} label="Regular payment" unit="/mo" step={100} value={ev.monthlyAmount} onChange={(v) => setItem('events', i, { monthlyAmount: v as number })} hint="0 if none" />
+                    </div>
+                    <Num id={`ev-${i}-rmrate`} label="Interest rate" unit="% a year" step={0.25} value={ev.loanRatePct} onChange={(v) => setItem('events', i, { loanRatePct: v as number })}
+                      hint="Interest compounds because nothing is repaid. Check current rates with providers." />
+                    <p className="asset-editor-note">You keep living in the home. The loan, with its interest, is repaid when the home is sold or at the end of the plan, and can&apos;t grow beyond the home&apos;s value.</p>
+                  </>
+                ) : ev.kind === 'sell_investment' ? (
                   <>
                     {plan.investments.length > 0 ? (
                       <Pick id={`ev-${i}-inv`} label="Investment" value={ev.investmentName ?? plan.investments[0].name}

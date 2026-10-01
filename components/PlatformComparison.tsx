@@ -3,10 +3,11 @@
 import { useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
 import {
-  CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { comparePlatforms, type PlatformComparisonInput } from '../lib/finance/platform-comparison';
-import { money } from './ProjectionChart';
+import { moneyFor, COUNTRIES } from '../lib/countries';
+import { useCountry } from './CountryPicker';
 
 type OptionDraft = {
   id: string;
@@ -20,8 +21,8 @@ type OptionDraft = {
 
 const COLORS = ['#087e8b', '#d45b43', '#b17b12', '#5b63b7'];
 const START_OPTIONS: OptionDraft[] = [
-  { id: 'option-1', name: 'Option 1', expectedReturnPct: 6, annualFeePct: 0.25, monthlyAccountFee: 0, transactionFee: 0, oneOffFee: 0 },
-  { id: 'option-2', name: 'Option 2', expectedReturnPct: 6, annualFeePct: 0.75, monthlyAccountFee: 4, transactionFee: 2, oneOffFee: 0 },
+  { id: 'option-1', name: 'Platform A', expectedReturnPct: 6, annualFeePct: 0.25, monthlyAccountFee: 0, transactionFee: 0, oneOffFee: 0 },
+  { id: 'option-2', name: 'Platform B', expectedReturnPct: 6, annualFeePct: 0.75, monthlyAccountFee: 4, transactionFee: 2, oneOffFee: 0 },
 ];
 
 function ComparisonInput({
@@ -46,7 +47,37 @@ function ComparisonInput({
   );
 }
 
+const LETTERS = ['A', 'B', 'C', 'D'];
+
+/** Writes the platform's name at the end of its line, so the chart reads without the legend. */
+function EndLabel({ x, y, index, last, name, color, nudge }: { x?: number; y?: number; index?: number; last: number; name: string; color: string; nudge: number }) {
+  if (index !== last || x === undefined || y === undefined) return null;
+  const short = name.length > 16 ? `${name.slice(0, 15)}…` : name;
+  return <text x={x + 6} y={y + nudge} fill={color} fontSize={11.5} fontWeight={650} dominantBaseline="middle">{short}</text>;
+}
+
+const PLOT_HEIGHT_PX = 220; // approximate drawing height of the chart
+const LABEL_GAP_PX = 15;
+
+/** Moves end labels apart when lines finish close together. Returns a pixel nudge per option. */
+function labelNudges(finals: { id: string; value: number }[]): Record<string, number> {
+  const max = Math.max(1, ...finals.map((f) => f.value)) * 1.1;
+  const gap = (LABEL_GAP_PX / PLOT_HEIGHT_PX) * max; // the label gap, in money
+  const sorted = [...finals].sort((a, b) => b.value - a.value);
+  const nudges: Record<string, number> = {};
+  let previous = Infinity;
+  for (const f of sorted) {
+    const placed = Math.min(f.value, previous - gap);
+    nudges[f.id] = ((f.value - placed) / max) * PLOT_HEIGHT_PX; // positive = lower on screen
+    previous = placed;
+  }
+  return nudges;
+}
+
 export default function PlatformComparison() {
+  const [country] = useCountry();
+  const money = moneyFor(country);
+  const cur = COUNTRIES[country].currency;
   const [initialBalance, setInitialBalance] = useState(50_000);
   const [monthlyContribution, setMonthlyContribution] = useState(500);
   const [years, setYears] = useState(20);
@@ -59,7 +90,9 @@ export default function PlatformComparison() {
     ])];
     if (!numericValues.every(Number.isFinite)) return null;
     try {
-      const input: PlatformComparisonInput = { initialBalance, monthlyContribution, years, inflationPct, options };
+      // A blank name falls back to "Platform A", "Platform B" and so on
+      const named = options.map((o, i) => ({ ...o, name: o.name.trim() || `Platform ${LETTERS[i]}` }));
+      const input: PlatformComparisonInput = { initialBalance, monthlyContribution, years, inflationPct, options: named };
       return comparePlatforms(input);
     } catch {
       return null;
@@ -75,12 +108,17 @@ export default function PlatformComparison() {
     });
   }, [result]);
 
+  const nudges = useMemo(
+    () => labelNudges((result?.options ?? []).map((o) => ({ id: o.id, value: o.series[o.series.length - 1]?.balance ?? 0 }))),
+    [result],
+  );
+
   const updateOption = (id: string, patch: Partial<OptionDraft>) =>
     setOptions((current) => current.map((option) => option.id === id ? { ...option, ...patch } : option));
 
   const addOption = () => setOptions((current) => current.length >= 4 ? current : [...current, {
     id: `option-${Date.now()}`,
-    name: `Option ${current.length + 1}`,
+    name: `Platform ${LETTERS[current.length]}`,
     expectedReturnPct: 6,
     annualFeePct: 0.5,
     monthlyAccountFee: 0,
@@ -93,13 +131,13 @@ export default function PlatformComparison() {
       <header className="comparison-heading">
         <p className="comparison-kicker">SAME STARTING BALANCE · SAME CONTRIBUTIONS</p>
         <h2 id="comparison-title">Compare costs over time</h2>
-        <p>Replace the sample assumptions with figures from current fund and platform documents. This is a scenario comparison, not a provider ranking.</p>
+        <p>Name each platform or fund, then replace the sample figures with its current fees from its website or fund fact sheet. The names appear on the chart. This is a scenario comparison, not a provider ranking.</p>
       </header>
 
       <div className="comparison-controls">
         <div className="comparison-common">
-          <ComparisonInput id="comparison-balance" label="Starting balance" value={initialBalance} step={1000} unit="NZD" onChange={setInitialBalance} />
-          <ComparisonInput id="comparison-contribution" label="Monthly contribution" value={monthlyContribution} step={50} unit="NZD" onChange={setMonthlyContribution} />
+          <ComparisonInput id="comparison-balance" label="Starting balance" value={initialBalance} step={1000} unit={cur} onChange={setInitialBalance} />
+          <ComparisonInput id="comparison-contribution" label="Monthly contribution" value={monthlyContribution} step={50} unit={cur} onChange={setMonthlyContribution} />
           <ComparisonInput id="comparison-years" label="Time horizon" value={years} step={1} unit="years" onChange={setYears} />
           <ComparisonInput id="comparison-inflation" label="Inflation" value={inflationPct} step={0.1} unit="% / year" onChange={setInflationPct} />
         </div>
@@ -109,8 +147,8 @@ export default function PlatformComparison() {
             <fieldset className="comparison-option" key={option.id} style={{ '--option-color': COLORS[index] } as CSSProperties}>
               <legend><span>{String(index + 1).padStart(2, '0')}</span> Fund or platform</legend>
               <label className="comparison-field" htmlFor={`${option.id}-name`}>
-                <span>Option name</span>
-                <input id={`${option.id}-name`} value={option.name} maxLength={80}
+                <span>Platform or fund name</span>
+                <input id={`${option.id}-name`} value={option.name} maxLength={80} placeholder="Name of the platform or fund"
                   onChange={(event) => updateOption(option.id, { name: event.target.value })} />
               </label>
               <div className="comparison-fees-grid">
@@ -118,38 +156,40 @@ export default function PlatformComparison() {
                   onChange={(value) => updateOption(option.id, { expectedReturnPct: value })} />
                 <ComparisonInput id={`${option.id}-annual`} label="Annual fund/platform fee" value={option.annualFeePct} step={0.05} unit="% / year"
                   onChange={(value) => updateOption(option.id, { annualFeePct: value })} />
-                <ComparisonInput id={`${option.id}-monthly`} label="Account fee" value={option.monthlyAccountFee} step={0.5} unit="NZD / month"
+                <ComparisonInput id={`${option.id}-monthly`} label="Account fee" value={option.monthlyAccountFee} step={0.5} unit={`${cur} / month`}
                   onChange={(value) => updateOption(option.id, { monthlyAccountFee: value })} />
-                <ComparisonInput id={`${option.id}-transaction`} label="Fee per contribution" value={option.transactionFee} step={0.5} unit="NZD"
+                <ComparisonInput id={`${option.id}-transaction`} label="Fee per contribution" value={option.transactionFee} step={0.5} unit={cur}
                   onChange={(value) => updateOption(option.id, { transactionFee: value })} />
-                <ComparisonInput id={`${option.id}-oneoff`} label="One-off fee" value={option.oneOffFee} step={1} unit="NZD"
+                <ComparisonInput id={`${option.id}-oneoff`} label="One-off fee" value={option.oneOffFee} step={1} unit={cur}
                   onChange={(value) => updateOption(option.id, { oneOffFee: value })} />
               </div>
               {options.length > 2 && (
                 <button type="button" className="comparison-remove" onClick={() => setOptions((current) => current.filter((entry) => entry.id !== option.id))}>
-                  Remove option
+                  Remove this platform
                 </button>
               )}
             </fieldset>
           ))}
-          {options.length < 4 && <button type="button" className="comparison-add" onClick={addOption}>+ Add comparison option</button>}
+          {options.length < 4 && <button type="button" className="comparison-add" onClick={addOption}>+ Add another platform</button>}
         </div>
       </div>
 
       {result ? (
         <div className="comparison-results" aria-live="polite">
           <div className="comparison-chart-wrap">
-            <div className="comparison-chart-heading"><h3>Projected balance</h3><span>Nominal NZD</span></div>
+            <div className="comparison-chart-heading"><h3>Projected balance</h3><span>{cur}, not adjusted for inflation</span></div>
             <div className="comparison-chart">
               <ResponsiveContainer>
-                <LineChart data={chartData} margin={{ top: 12, right: 18, bottom: 6, left: 4 }}>
+                <LineChart data={chartData} margin={{ top: 12, right: 118, bottom: 6, left: 4 }}>
                   <CartesianGrid stroke="#d8e1df" vertical={false} />
                   <XAxis dataKey="year" tick={{ fill: '#637275', fontSize: 11 }} tickLine={false} />
                   <YAxis tickFormatter={(value) => new Intl.NumberFormat('en-NZ', { notation: 'compact', maximumFractionDigits: 1 }).format(Number(value))}
                     tick={{ fill: '#637275', fontSize: 11 }} width={52} tickLine={false} axisLine={false} />
-                  <Tooltip formatter={(value) => [money(Number(value)), 'Projected balance']} labelFormatter={(year) => `Year ${year}`} />
+                  <Tooltip formatter={(value, name) => [money(Number(value)), String(name)]} labelFormatter={(year) => `Year ${year}`} />
+                  <Legend verticalAlign="top" height={30} iconType="plainline" wrapperStyle={{ fontSize: 12.5 }} />
                   {result.options.map((option, index) => (
-                    <Line key={option.id} dataKey={option.id} name={option.name} stroke={COLORS[index]} strokeWidth={2.5} dot={false} isAnimationActive={false} />
+                    <Line key={option.id} dataKey={option.id} name={option.name} stroke={COLORS[index]} strokeWidth={2.5} dot={false} isAnimationActive={false}
+                      label={<EndLabel last={chartData.length - 1} name={option.name} color={COLORS[index]} nudge={nudges[option.id] ?? 0} />} />
                   ))}
                 </LineChart>
               </ResponsiveContainer>
@@ -159,7 +199,7 @@ export default function PlatformComparison() {
           <div className="comparison-table-wrap">
             <table className="comparison-table">
               <caption>Outcome after {years} years</caption>
-              <thead><tr><th scope="col">Option</th><th scope="col">Balance</th><th scope="col">Today&apos;s dollars</th><th scope="col">Fees paid</th><th scope="col">Fee drag</th></tr></thead>
+              <thead><tr><th scope="col">Platform or fund</th><th scope="col">Balance</th><th scope="col">In today&apos;s money</th><th scope="col">Fees paid</th><th scope="col">Fee drag</th></tr></thead>
               <tbody>{result.options.map((option, index) => (
                 <tr key={option.id} style={{ '--option-color': COLORS[index] } as CSSProperties}>
                   <th scope="row"><span className="comparison-swatch" />{option.name}</th>

@@ -235,6 +235,20 @@ export function analyseHousehold(r: HouseholdResult): HouseholdAnalysis {
     strengths.push({ title: 'Pensions from more than one country', detail: `Pension income is expected from ${pensionCountries.map((c) => (c ? COUNTRIES[c].name : '')).join(' and ')}. Check each country's rules on paying pensions abroad and whether one reduces the other.` });
   }
 
+  // Reverse mortgage: the debt grows because interest compounds and nothing is repaid
+  const rmSeries = mid.series.filter((p) => p.reverseMortgage > 0);
+  if (rmSeries.length) {
+    const first = rmSeries[0];
+    const end = mid.series[mid.series.length - 1];
+    const peak = rmSeries.reduce((a, b) => (b.reverseMortgage > a.reverseMortgage ? b : a));
+    const owedAtEnd = end.reverseMortgage > 0 ? end.reverseMortgage : peak.reverseMortgage;
+    const owedAge = end.reverseMortgage > 0 ? h.endAge : peak.age;
+    risks.push({
+      title: 'Reverse mortgage debt grows',
+      detail: `Interest compounds on the reverse mortgage and nothing is repaid, so the amount owed grows from about ${nzd(first.reverseMortgage)} at ${first.age} to about ${nzd(owedAtEnd)} by ${owedAge}, in today's money. That reduces what's left from the home for you or your family.`,
+    });
+  }
+
   // Levers: each re-runs the whole projection with one change
   const levers: Lever[] = [];
   const tryLever = (title: string, change: string, tradeOff: string, next: Household) => {
@@ -309,7 +323,7 @@ export function analyseHousehold(r: HouseholdResult): HouseholdAnalysis {
     const age = Math.min(Math.max(r.retirementAge, h.you.currentAge + 1), h.endAge - 1);
     tryLever(`Sell ${target.name} at ${age}`, `Sell it when you retire and invest the proceeds (after 3% selling costs and its mortgage)`, h.properties.length > 1 ? 'Loses any rent and future growth on that property; selling costs and tax may apply.' : 'You would need somewhere else to live; this is most relevant when downsizing.', {
       ...h,
-      events: [...h.events, { name: `Sell ${target.name}`, kind: 'sell_property', atAge: age, amount: 0, propertyName: target.name, replacementValue: 0, sellingCostsPct: 3, sharePct: 100 }],
+      events: [...h.events, { name: `Sell ${target.name}`, kind: 'sell_property', atAge: age, amount: 0, propertyName: target.name, replacementValue: 0, sellingCostsPct: 3, sharePct: 100, monthlyAmount: 0, loanRatePct: 9 }],
     });
   }
 

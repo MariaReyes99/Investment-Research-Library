@@ -47,8 +47,8 @@ export const TAX_TREATMENTS = ['returns_after_tax', 'taxed_yearly', 'taxed_on_wi
 
 export const InvestmentSchema = z.object({
   name,
-  kind: z.enum(['kiwisaver', 'retirement_account', 'shares', 'managed_fund', 'term_deposit', 'bonds', 'other']).default('shares')
-    .describe('kiwisaver for NZ; retirement_account for super, 401(k)/IRA, workplace pension/SIPP or PERA'),
+  kind: z.enum(['kiwisaver', 'retirement_account', 'index_fund', 'managed_fund', 'shares', 'term_deposit', 'bonds', 'other']).default('shares')
+    .describe('kiwisaver for NZ; retirement_account for super, 401(k)/IRA, workplace pension/SIPP or PERA; index_fund for index funds and ETFs; managed_fund for actively managed funds; shares for individual company shares'),
   owner,
   balance: amount,
   returnPct: z.number().min(-10).max(20).describe('Expected yearly return before fees'),
@@ -120,13 +120,15 @@ export const ExpenseSchema = z.object({
 
 export const EventSchema = z.object({
   name,
-  kind: z.enum(['money_in', 'money_out', 'sell_property', 'sell_investment'])
-    .describe('money_in: inheritance, sale of a business, lump sum. money_out: renovation, car, wedding. sell_property: sell (or downsize) a property. sell_investment: cash out all or part of an investment.'),
+  kind: z.enum(['money_in', 'money_out', 'sell_property', 'sell_investment', 'reverse_mortgage'])
+    .describe('money_in: inheritance, sale of a business, lump sum. money_out: renovation, car, wedding. sell_property: sell (or downsize) a property. sell_investment: cash out all or part of an investment. reverse_mortgage: borrow against a property with no repayments; interest compounds and the loan is repaid when the property is sold.'),
   atAge: z.number().int().min(16).max(110).describe('Your age when it happens'),
   amount: amount.default(0).describe("Money in or out, in today's money. Not used for sell_property."),
   propertyName: z.string().max(80).optional().describe('For sell_property: the property to sell'),
   investmentName: z.string().max(80).optional().describe('For sell_investment: the investment to cash out'),
   sharePct: z.number().min(1).max(100).default(100).describe('For sell_investment: how much of it to cash out, as a percentage'),
+  monthlyAmount: monthly.default(0).describe("For reverse_mortgage: regular payments you receive each month, in today's money (as well as or instead of a lump sum in amount)"),
+  loanRatePct: z.number().min(0).max(25).default(9).describe('For reverse_mortgage: yearly interest rate; interest compounds because nothing is repaid'),
   replacementValue: amount.default(0).describe("For sell_property: price of a cheaper home bought instead (downsizing), in today's money. 0 = not replaced."),
   sellingCostsPct: z.number().min(0).max(15).default(3),
   currency,
@@ -228,6 +230,8 @@ export interface HouseholdPoint {
   investments: number;
   property: number;
   propertyDebt: number;
+  /** Reverse mortgage owed, including compounded interest (also counted in propertyDebt). */
+  reverseMortgage: number;
   otherAssets: number;
   otherDebt: number;
   liquid: number;
@@ -248,6 +252,7 @@ export interface HouseholdScenario {
   investmentShiftPct: number;
   series: HouseholdPoint[];
   shortfallAge: number | null;
+  reverseMortgageFull?: Record<string, number>;
 }
 
 export interface MonthlyLine { label: string; amount: number }
@@ -352,6 +357,8 @@ interface SimOptions {
 interface SimResult {
   series: HouseholdPoint[];
   shortfallAge: number | null;
+  /** Age at which a reverse mortgage reached the property's value, by property name. */
+  reverseMortgageFull?: Record<string, number>;
 }
 
 /** Runs one scenario. Returns yearly points in today's money. */
@@ -379,6 +386,11 @@ function simulate(h: Household, o: SimOptions): SimResult {
   const prop = h.properties.map((p) => p.value * fxAt(p.currency, 0));
   const mort = h.properties.map((p) => p.mortgageBalance * fxAt(p.currency, 0));
   const sold = h.properties.map(() => false);
+  // Reverse mortgages: loan balance (home currency), monthly drawdown (today's money) and monthly rate, per property
+  const rm = h.properties.map(() => 0);
+  const rmMonthly = h.properties.map(() => 0);
+  const rmRate = h.properties.map(() => 0);
+  const rmCapped: (number | undefined)[] = h.properties.map(() => undefined);
   const other = h.otherAssets.map((a) => a.value * fxAt(a.currency, 0));
   const debt = h.debts.map((d) => d.balance * fxAt(d.currency, 0));
   const invDrift = h.investments.map((i) => fx.drift(i.currency));
@@ -410,7 +422,7 @@ function simulate(h: Household, o: SimOptions): SimResult {
     const d = infl(m);
     const investments = sum(inv) + pot;
     const property = sum(prop);
-    const propertyDebt = sum(mort);
+    const propertyDebt = sum(mort) + sum(rm);
     const otherAssets = sum(other);
     const otherDebt = sum(debt);
     const liquid = cash + investments;
@@ -421,6 +433,7 @@ function simulate(h: Household, o: SimOptions): SimResult {
       investments: investments / d,
       property: property / d,
       propertyDebt: propertyDebt / d,
+      reverseMortgage: sum(rm) / d,
       otherAssets: otherAssets / d,
       otherDebt: otherDebt / d,
       liquid: liquid / d,
@@ -493,6 +506,15 @@ function simulate(h: Household, o: SimOptions): SimResult {
         eventNet += e.amount * f * fxAt(e.currency, m);
       } else if (e.kind === 'money_out') {
         eventNet -= e.amount * f * fxAt(e.currency, m);
+      } else if (e.kind === 'reverse_mortgage') {
+        const j = h.properties.findIndex((p) => p.name === e.propertyName);
+        const idx = j >= 0 ? j : 0;
+        if (!h.properties[idx] || sold[idx]) return;
+        const lump = Math.min(e.amount * f, Math.max(0, prop[idx] - mort[idx] - rm[idx]));
+        rm[idx] += lump;
+        eventNet += lump;
+        rmMonthly[idx] = e.monthlyAmount;
+        rmRate[idx] = monthlyRate(e.loanRatePct);
       } else if (e.kind === 'sell_investment') {
         // Cash out part or all of an investment; the money joins your savings
         const j = h.investments.findIndex((i) => i.name === e.investmentName);
@@ -508,7 +530,10 @@ function simulate(h: Household, o: SimOptions): SimResult {
         const j = h.properties.findIndex((p) => p.name === e.propertyName);
         const idx = j >= 0 ? j : h.properties.findIndex((_, q) => !sold[q]);
         if (idx < 0 || sold[idx]) return;
-        const proceeds = prop[idx] * (1 - e.sellingCostsPct / 100) - mort[idx];
+        // The sale repays the mortgage and any reverse mortgage
+        const proceeds = prop[idx] * (1 - e.sellingCostsPct / 100) - mort[idx] - rm[idx];
+        rm[idx] = 0;
+        rmMonthly[idx] = 0;
         const replacement = e.replacementValue * f * fxAt(e.currency ?? h.properties[idx].currency, m);
         eventNet += proceeds - replacement;
         prop[idx] = replacement;
@@ -528,6 +553,21 @@ function simulate(h: Household, o: SimOptions): SimResult {
     });
     h.properties.forEach((p, k) => {
       if (!sold[k]) income += p.monthlyNetRent * f * fxAt(p.currency, m);
+    });
+    // Reverse mortgages: interest compounds; regular payments are paid out until the loan reaches the home's value
+    h.properties.forEach((_, k) => {
+      if (sold[k] || (rm[k] <= 0 && rmMonthly[k] <= 0)) return;
+      rm[k] *= 1 + rmRate[k];
+      const room = Math.max(0, prop[k] - mort[k] - rm[k]);
+      const draw = Math.min(rmMonthly[k] * f, room);
+      rm[k] += draw;
+      income += draw;
+      // No-negative-equity guarantee: the loan never exceeds the home's value
+      if (rm[k] > prop[k]) rm[k] = prop[k];
+      if (room <= 0) {
+        rmMonthly[k] = 0;
+        rmCapped[k] ??= Math.floor(h.you.currentAge + m / 12);
+      }
     });
 
     // Living costs, with the retirement withdrawal strategy
@@ -635,7 +675,9 @@ function simulate(h: Household, o: SimOptions): SimResult {
       year = emptyYear();
     }
   }
-  return { series, shortfallAge };
+  const reverseMortgageFull: Record<string, number> = {};
+  rmCapped.forEach((age, k) => { if (age !== undefined) reverseMortgageFull[h.properties[k].name] = age; });
+  return { series, shortfallAge, reverseMortgageFull };
 }
 
 const at = (series: HouseholdPoint[], age: number) =>
@@ -777,6 +819,14 @@ function warningsFor(h: Household, expected: HouseholdScenario, surplus: number)
       }
     }
     if (e.atAge <= h.you.currentAge || e.atAge >= h.endAge) w.push(`${e.name}: age ${e.atAge} is outside the plan, so it is ignored.`);
+    if (e.kind === 'reverse_mortgage') {
+      const p = h.properties.find((x) => x.name === e.propertyName) ?? h.properties[0];
+      if (!p) w.push(`${e.name}: add the property first.`);
+      if (e.atAge < 60) w.push(`${e.name}: reverse mortgages are usually only available from about age 60, and the amount you can borrow rises with age.`);
+      if (p && p.mortgageBalance > 0) w.push(`${e.name}: providers usually require any existing mortgage on ${p.name} to be repaid first, often from the lump sum.`);
+      const full = expected.reverseMortgageFull?.[p?.name ?? ''];
+      if (full !== undefined) w.push(`${e.name}: with interest compounding, the loan reaches the value of ${p?.name} at about age ${full}, so payments stop there. Many providers guarantee you'll never owe more than the home is worth; check yours does.`);
+    }
   }
   if (surplus < 0) w.push(`Spending is more than income today by about ${money(-surplus)} a month; the gap is drawn from savings.`);
   if (expected.shortfallAge !== null) {

@@ -427,3 +427,95 @@ test('guided growth, fees, property costs, car, valuables, other costs and infla
   const r = projectHousehold(plan, { monteCarlo: false });
   assert.ok(r.today.outgoings.some((l) => l.label === 'Property costs'));
 });
+
+test('reverse mortgage: lump sum and monthly payments, compounding interest, repaid on sale', () => {
+  const r = projectHousehold({
+    you: { currentAge: 64, retirementAge: 64 }, endAge: 70, inflationPct: 0, surplusReturnPct: 0,
+    properties: [{ name: 'Home', value: 1_000_000, growthPct: 0 }],
+    events: [
+      { name: 'Reverse mortgage on Home', kind: 'reverse_mortgage', atAge: 65, propertyName: 'Home', amount: 50_000, monthlyAmount: 1_000, loanRatePct: 0 },
+      { name: 'Sell Home', kind: 'sell_property', atAge: 68, propertyName: 'Home', sellingCostsPct: 0 },
+    ],
+  }, { monteCarlo: false });
+  const s = r.scenarios[1].series;
+  near(s[2].propertyDebt, 50_000 + 12_000, 0.01); // after a year: lump sum plus 12 payments
+  near(s[2].income, 12_000, 0.01);
+  near(s[4].propertyDebt, 50_000 + 36_000, 0.01); // just before the sale at 68
+  near(s[5].propertyDebt, 0, 0.01); // repaid from the sale
+  near(s[5].liquid, 1_000_000, 0.01); // borrowed money kept + sale proceeds after repaying = the home's value
+});
+
+test('reverse mortgage interest compounds and the loan never exceeds the home value', () => {
+  const r = projectHousehold({
+    you: { currentAge: 65, retirementAge: 65 }, endAge: 90, inflationPct: 0,
+    properties: [{ name: 'Home', value: 200_000, growthPct: 0 }],
+    events: [{ name: 'RM', kind: 'reverse_mortgage', atAge: 66, propertyName: 'Home', amount: 100_000, loanRatePct: 10 }],
+  }, { monteCarlo: false });
+  const s = r.scenarios[1].series;
+  near(s[2].propertyDebt, 110_000, 300); // a year of 10% interest
+  assert.ok(s[s.length - 1].propertyDebt <= 200_000 + 0.01, 'capped at the home value');
+  assert.ok(r.warnings.some((w) => w.includes('reaches the value of Home')));
+});
+
+import { mergeWithBase, planToAnswers } from '../components/PlannerWizard';
+
+const DETAILED: HouseholdInput = {
+  country: 'NZ',
+  you: { currentAge: 55, retirementAge: 65 },
+  cashOnHand: 20_000,
+  investments: [{ name: 'IRA', kind: 'retirement_account', balance: 100_000, returnPct: 6, feesPct: 0.3, taxTreatment: 'taxed_on_withdrawal', taxRatePct: 25, currency: 'USD' }],
+  properties: [{ name: 'Home', value: 900_000, mortgageBalance: 200_000, mortgageRatePct: 6.8, monthlyRepayment: 2_000, monthlyCosts: 400 }],
+  debts: [{ name: 'Car loan', balance: 10_000, ratePct: 12, monthlyPayment: 300 }, { name: 'Card', balance: 2_000, ratePct: 20, monthlyPayment: 100 }],
+  incomes: [{ name: 'Pay', kind: 'salary', monthlyAmount: 8_000 }, { name: 'Dividends', kind: 'dividends', monthlyAmount: 200 }],
+  livingExpensesMonthly: 4_000,
+  withdrawal: { strategy: 'guardrails', ratePct: 4 },
+  fx: [{ currency: 'USD', rate: 1.7 }],
+  events: [{ name: 'Reverse mortgage on Home', kind: 'reverse_mortgage', atAge: 72, propertyName: 'Home', amount: 50_000, monthlyAmount: 500, loanRatePct: 8.5 }],
+};
+
+test('All details plans become guided answers', () => {
+  const a = planToAnswers(DETAILED);
+  assert.equal(a.bank, 20_000);
+  assert.equal(a.savings[0].kind, 'retirement');
+  assert.equal(a.savings[0].currency, 'USD');
+  assert.equal(a.homes[0].yearlyCosts, 4_800);
+  assert.equal(a.homes[0].rmAge, 72);
+  assert.equal(a.loanOwe, 12_000);
+  assert.equal(a.otherIncome, 200);
+  assert.equal(a.abroad, true);
+});
+
+test('editing one guided section keeps every hidden detail elsewhere', () => {
+  const baseAnswers = planToAnswers(DETAILED);
+  const edited = { ...baseAnswers, bank: 35_000 };
+  const fresh = answersToPlan(edited, 'NZ', null, { USD: 1.7 });
+  const merged = mergeWithBase(DETAILED, baseAnswers, edited, fresh);
+  assert.equal(merged.cashOnHand, 35_000);
+  assert.equal(merged.investments?.[0].taxTreatment, 'taxed_on_withdrawal');
+  assert.equal(merged.properties?.[0].mortgageRatePct, 6.8);
+  assert.equal(merged.debts?.length, 2);
+  assert.equal(merged.incomes?.find((i) => i.kind === 'dividends')?.monthlyAmount, 200);
+  assert.equal(merged.withdrawal?.strategy, 'guardrails');
+  assert.equal(merged.events?.[0].loanRatePct, 8.5);
+});
+
+test('changing a home in the guided setup keeps its mortgage rate', () => {
+  const baseAnswers = planToAnswers(DETAILED);
+  const edited = { ...baseAnswers, homes: [{ ...baseAnswers.homes[0], worth: 950_000 }] };
+  const merged = mergeWithBase(DETAILED, baseAnswers, edited, answersToPlan(edited, 'NZ', null, { USD: 1.7 }));
+  assert.equal(merged.properties?.[0].value, 950_000);
+  assert.equal(merged.properties?.[0].mortgageRatePct, 6.8);
+  assert.ok(projectHousehold(merged, { monteCarlo: false }).today.netWorth > 0);
+});
+
+test('reverse mortgage debt is shown separately and the analysis flags its growth', () => {
+  const r = projectHousehold({
+    you: { currentAge: 65, retirementAge: 65 }, endAge: 85, inflationPct: 0,
+    properties: [{ name: 'Home', value: 900_000, growthPct: 0 }],
+    events: [{ name: 'RM', kind: 'reverse_mortgage', atAge: 66, propertyName: 'Home', amount: 100_000, loanRatePct: 9 }],
+  }, { monteCarlo: false });
+  const s = r.scenarios[1].series;
+  near(s[s.length - 1].reverseMortgage, 100_000 * Math.pow(1.09, 19), 2_000); // 19 years of 9% compounding
+  const a = analyseHousehold(r);
+  assert.ok(a.risks.some((f) => f.title === 'Reverse mortgage debt grows'));
+});
