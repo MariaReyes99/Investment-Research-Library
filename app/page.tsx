@@ -2,6 +2,7 @@
 
 import { memo, useEffect, useMemo, useState } from 'react';
 import SiteNav from '../components/SiteNav';
+import { useProjectorPlan } from '../components/useProjectorPlan';
 import Link from 'next/link';
 import { useChat } from '@ai-sdk/react';
 import ReactMarkdown from 'react-markdown';
@@ -128,6 +129,10 @@ type UsageInfo = { remaining: number | null; limit: number; tier: LimitTier; lim
 export default function Page() {
   const [country, setCountry] = useCountry();
   const [retireIn, setRetireIn] = useRetireIn();
+  // The plan from the wealth projector, sent only while "Include my plan" is on
+  const projectorPlan = useProjectorPlan(country);
+  const [includePlan, setIncludePlan] = useState(false);
+  const sharePlan = includePlan && projectorPlan ? projectorPlan.plan : undefined;
   const [privacyNotice, setPrivacyNotice] = useState<string | null>(null);
   const [remaining, setRemaining] = useState<number | null>(null);
   const [answerHeld, setAnswerHeld] = useState(false);
@@ -148,7 +153,7 @@ export default function Page() {
 
   const { messages, input, setInput, setMessages, handleInputChange, handleSubmit, status, error } = useChat({
     api: '/api/chat',
-    body: { country, retireIn: retireIn && retireIn !== country ? retireIn : undefined },
+    body: { country, retireIn: retireIn && retireIn !== country ? retireIn : undefined, plan: sharePlan },
     onResponse: (res) => {
       const notice = res.headers.get('X-Privacy-Notice');
       setPrivacyNotice(notice ? decodeURIComponent(notice) : null);
@@ -354,6 +359,35 @@ export default function Page() {
           {limitTier && <UpgradePanel tier={limitTier} />}
 
           <div className="composer-wrap">
+            <div className={`plan-share${includePlan && projectorPlan ? ' is-on' : ''}`}>
+              {projectorPlan ? (
+                <>
+                  <label className="plan-share-toggle">
+                    <input type="checkbox" role="switch" checked={includePlan} onChange={(ev) => setIncludePlan(ev.target.checked)} />
+                    <span className="plan-share-track" aria-hidden="true"><span /></span>
+                    <span>📎 Include my wealth projector plan</span>
+                  </label>
+                  <small>
+                    {includePlan
+                      ? `Your ${projectorPlan.source === 'full' ? '"All details"' : 'guided'} plan is sent with each question while this is on. Names, IRD and bank numbers are removed first.`
+                      : 'Off: your plan stays on this device.'}
+                  </small>
+                  {includePlan && (
+                    <div className="plan-share-ideas">
+                      {[
+                        'Review my plan against well-known investing principles',
+                        'Where could I improve my plan?',
+                        "Which country's rules apply to each of my investments?",
+                      ].map((q) => (
+                        <button key={q} type="button" className="suggestion-chip" onClick={() => setInput(q)}>{q}</button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <small>Want answers about your own numbers? <Link href="/calculator">Fill in the wealth projector</Link>, then switch on &quot;Include my plan&quot; here.</small>
+              )}
+            </div>
             {privacyNotice && (
               <p className="privacy-notice" role="status">
                 {privacyNotice}

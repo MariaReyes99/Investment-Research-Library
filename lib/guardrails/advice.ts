@@ -109,3 +109,19 @@ MORE THAN ONE COUNTRY
       : ''
   }`;
 }
+
+/**
+ * The person's own projector plan, shared on purpose with the "Include my plan" switch.
+ * The inputs have been checked against the projection schema before they get here.
+ */
+export function sharedPlanContext(planJson: string): string {
+  return `THE USER'S PLAN (shared from the wealth projector, with their permission)
+${planJson}
+
+When this plan is shared:
+- Treat it as the user's real situation. Run projectHousehold ONCE with exactly these inputs (only change what the user asks) before commenting on numbers. Don't ask again for anything already in it.
+- To review it, search the library (getInformation) for the principles that apply, such as diversification, fees, emergency funds, asset allocation, withdrawal rates, debt versus investing, and well-known approaches (index, value, dividend, asset allocation). Compare the plan with each principle, citing the library, then use the analysis returned by projectHousehold for strengths, weaknesses, risks and levers.
+- For each investment, property and pension, consider the country it is held in (its currency) AND the user's country of residence: tax and pension rules usually follow where you live, and some follow where the asset is (for example NZ FIF rules for overseas shares held by NZ residents, or property taxes where the property is). Say which country's rules you're describing, and say plainly when the library doesn't cover that country.
+- Describe options people in this position often consider, with trade-offs. Don't tell the user what to buy, sell or do, and don't attribute returns to named investors.
+- Never repeat the plan back as JSON or a full table; refer to items by name.`;
+}

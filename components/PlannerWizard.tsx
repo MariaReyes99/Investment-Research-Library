@@ -19,10 +19,11 @@ import PlanFileActions from './PlanFileActions';
 type Style = 'careful' | 'balanced' | 'growth';
 const STYLE_RETURN: Record<Style, number> = { careful: 4, balanced: 5.5, growth: 7 };
 
-type Savings = { name: string; kind: 'retirement' | 'investments' | 'term' | 'other'; amount?: number; monthly?: number; style: Style; currency?: Currency; cashOutAge?: number; cashOutPct?: number };
-type Home = { name: string; worth?: number; owe?: number; payment?: number; rent?: number; currency?: Currency; sellAge?: number };
+type Savings = { name: string; kind: 'retirement' | 'investments' | 'term' | 'other'; amount?: number; monthly?: number; style: Style; currency?: Currency; cashOutAge?: number; cashOutPct?: number; growthPct?: number; feesPct?: number };
+type Home = { name: string; worth?: number; owe?: number; payment?: number; rent?: number; currency?: Currency; sellAge?: number; growthPct?: number; yearlyCosts?: number };
+type OtherCost = { name: string; monthly?: number; years?: number };
 type ForeignPension = { country: CountryCode; monthly?: number; owner: 'you' | 'partner' };
-type Family = { kind: 'child' | 'parent' | 'pet'; monthly?: number; years?: number };
+type Family = { kind: 'child' | 'parent' | 'pet'; monthly?: number; years?: number; startIn?: number };
 
 export interface Answers {
   who: 'me' | 'couple';
@@ -38,6 +39,10 @@ export interface Answers {
   family: Family[];
   sellHomeAge?: number; gift?: number; giftAge?: number; bigSpend?: number; bigSpendAge?: number;
   goal?: number;
+  /** Things you own */
+  car?: number; carLossPct?: number; valuables?: number; valuablesChangePct?: number;
+  otherCosts?: OtherCost[];
+  inflationPct?: number;
 }
 
 const START: Answers = { who: 'me', savings: [], homes: [], family: [], foreignPensions: [] };
@@ -86,23 +91,30 @@ export function answersToPlan(a: Answers, country: CountryCode, retireIn: Countr
     you: { currentAge: age, retirementAge: stop },
     partner: couple ? { currentAge: pAge, retirementAge: pStop } : undefined,
     endAge: Math.max(90, age + 5),
-    inflationPct: c.inflationPct,
+    inflationPct: a.inflationPct ?? c.inflationPct,
     cashOnHand: n(a.bank),
     investments: savings.map((s, i) => ({
       name: saveName(s, i),
       currency: cur(s.currency),
       kind: s.kind === 'retirement' ? (country === 'NZ' ? 'kiwisaver' : 'retirement_account') : s.kind === 'term' ? 'term_deposit' : s.kind === 'investments' ? 'shares' : 'other',
       balance: n(s.amount),
-      returnPct: s.kind === 'term' ? 4 : STYLE_RETURN[s.style],
-      feesPct: s.kind === 'term' ? 0 : 0.5,
+      returnPct: s.growthPct ?? (s.kind === 'term' ? 4 : STYLE_RETURN[s.style]),
+      feesPct: s.feesPct ?? (s.kind === 'term' ? 0 : 0.5),
       monthlyContribution: n(s.monthly),
       contributionsStopAtRetirement: true,
     })),
     properties: homes.map((h, i) => ({
       name: homeName(h, i),
       currency: cur(h.currency),
-      value: n(h.worth), growthPct: 3, mortgageBalance: n(h.owe), mortgageRatePct: 5.5,
-      monthlyRepayment: n(h.payment), monthlyNetRent: n(h.rent),
+      value: n(h.worth), growthPct: h.growthPct ?? 3, mortgageBalance: n(h.owe), mortgageRatePct: 5.5,
+      monthlyRepayment: n(h.payment), monthlyNetRent: n(h.rent), monthlyCosts: Math.round(n(h.yearlyCosts) / 12),
+    })),
+    otherAssets: [
+      ...(n(a.car) > 0 ? [{ name: 'Car', kind: 'vehicle' as const, value: n(a.car), changePct: -(a.carLossPct ?? 10) }] : []),
+      ...(n(a.valuables) > 0 ? [{ name: 'Valuables', kind: 'other' as const, value: n(a.valuables), changePct: a.valuablesChangePct ?? 0 }] : []),
+    ],
+    otherExpenses: (a.otherCosts ?? []).filter((x) => n(x.monthly) > 0).map((x) => ({
+      name: x.name || 'Other cost', monthlyAmount: n(x.monthly), years: x.years && x.years > 0 ? x.years : undefined, startInYears: 0,
     })),
     debts: n(a.loanOwe) > 0 ? [{ name: 'Other loans', balance: n(a.loanOwe), ratePct: 9, monthlyPayment: n(a.loanPayment) }] : [],
     incomes: [
@@ -121,7 +133,7 @@ export function answersToPlan(a: Answers, country: CountryCode, retireIn: Countr
     retirementLivingExpensesMonthly: a.spendingRetired !== undefined && Number.isFinite(a.spendingRetired) ? a.spendingRetired : undefined,
     dependants: a.family.filter((f) => n(f.monthly) > 0).map((f) => ({
       name: f.kind === 'child' ? 'Child' : f.kind === 'parent' ? 'Parent' : 'Pet', kind: f.kind,
-      monthlyCost: n(f.monthly), years: n(f.years) || 10, startInYears: 0,
+      monthlyCost: n(f.monthly), years: n(f.years) || 10, startInYears: n(f.startIn),
     })),
     events: [
       ...homes.flatMap((h, i) => (n(h.sellAge) > age ? [{ name: `Sell ${homeName(h, i)}`, kind: 'sell_property' as const, atAge: n(h.sellAge), propertyName: homeName(h, i) }] : [])),
@@ -134,7 +146,7 @@ export function answersToPlan(a: Answers, country: CountryCode, retireIn: Countr
     contributionsFromOutsideIncome: a.pay === undefined && a.partnerPay === undefined && a.spending === undefined,
   };
   // An exchange rate for every other currency used: today's rate if we have it, otherwise a rough one
-  plan.fx = usedCurrencies({ ...plan, investments: plan.investments ?? [], properties: plan.properties ?? [], otherAssets: [], debts: [], incomes: plan.incomes ?? [], dependants: [], otherExpenses: [], events: [] } as Parameters<typeof usedCurrencies>[0])
+  plan.fx = usedCurrencies({ ...plan, investments: plan.investments ?? [], properties: plan.properties ?? [], otherAssets: plan.otherAssets ?? [], debts: [], incomes: plan.incomes ?? [], dependants: [], otherExpenses: [], events: [] } as Parameters<typeof usedCurrencies>[0])
     .filter((x) => x !== home)
     .map((x) => ({ currency: x, rate: rates[x] ?? Number((ROUGH_USD[x] / ROUGH_USD[home]).toPrecision(4)), yearlyChangePct: 0 }));
   return plan;
@@ -157,6 +169,25 @@ function Field({ id, label, help, value, onChange, prefix, suffix, placeholder }
         {suffix && <span aria-hidden="true">{suffix}</span>}
       </div>
     </div>
+  );
+}
+
+function TextField({ id, label, value, onChange, placeholder }: { id: string; label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
+  return (
+    <div className="wizard-field">
+      <label htmlFor={id}>{label}</label>
+      <div className="wizard-input"><input id={id} value={value} maxLength={60} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} /></div>
+    </div>
+  );
+}
+
+/** Optional extra questions, tucked away so the main question stays simple. */
+function More({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <details className="wizard-more">
+      <summary>{label}</summary>
+      <div className="wizard-more-body">{children}</div>
+    </details>
   );
 }
 
@@ -330,6 +361,14 @@ export default function PlannerWizard({ onPlanChange }: { onPlanChange?: (plan: 
                     <p className="wizard-help">Not sure? Your provider&apos;s statement or app usually shows the fund name, such as &quot;Balanced&quot; or &quot;Growth&quot;.</p>
                   </>
                 )}
+                <More label="Fine-tune growth and fees (optional)">
+                  <div className="wizard-pair">
+                    <Field id={`wiz-savg-${i}`} label="How much do you expect it to grow each year?" help="Before fees. Leave blank to use the choice above."
+                      value={s.growthPct} onChange={(v) => upd({ growthPct: v })} suffix="% a year" placeholder={String(s.kind === 'term' ? 4 : STYLE_RETURN[s.style])} />
+                    <Field id={`wiz-savf-${i}`} label="Yearly fees and costs" help="Management and platform fees, from your fund's fact sheet. These slowly eat into growth."
+                      value={s.feesPct} onChange={(v) => upd({ feesPct: v })} suffix="% a year" placeholder={s.kind === 'term' ? '0' : '0.5'} />
+                  </div>
+                </More>
               </Card>
             );
           })}
@@ -340,8 +379,8 @@ export default function PlannerWizard({ onPlanChange }: { onPlanChange?: (plan: 
       ),
     },
     {
-      icon: '🏡', title: 'Your home and property',
-      why: 'What your home (and any other property) is worth, and what you still owe on it.',
+      icon: '🏡', title: 'Your home and other things you own',
+      why: 'What your home, any other property, your car and valuables are worth, what you still owe, and what they cost to keep.',
       optional: true,
       body: (
         <>
@@ -356,7 +395,13 @@ export default function PlannerWizard({ onPlanChange }: { onPlanChange?: (plan: 
                 </div>
                 <div className="wizard-pair">
                   <Field id={`wiz-hp-${i}`} label="Mortgage payment each month" value={h.payment} onChange={(v) => upd({ payment: v })} prefix={a.abroad && h.currency ? h.currency : cur} />
-                  <Field id={`wiz-hr-${i}`} label="Rent you receive each month" help="Only if you rent it out. After costs like rates and repairs." value={h.rent} onChange={(v) => upd({ rent: v })} prefix={a.abroad && h.currency ? h.currency : cur} />
+                  <Field id={`wiz-hr-${i}`} label="Rent you receive each month" help="Only if you rent it out. Running costs go in the next box." value={h.rent} onChange={(v) => upd({ rent: v })} prefix={a.abroad && h.currency ? h.currency : cur} />
+                </div>
+                <div className="wizard-pair">
+                  <Field id={`wiz-hcost-${i}`} label="Running costs each year" help="Rates, insurance, repairs and upkeep. Don't count these in everyday spending too."
+                    value={h.yearlyCosts} onChange={(v) => upd({ yearlyCosts: v })} prefix={a.abroad && h.currency ? h.currency : cur} />
+                  <Field id={`wiz-hg-${i}`} label="How much might its value grow each year?" help="Leave blank for 3%, a common long-run assumption."
+                    value={h.growthPct} onChange={(v) => upd({ growthPct: v })} suffix="% a year" placeholder="3" />
                 </div>
                 <Field id={`wiz-hs-${i}`} label="Planning to sell it? At what age?" help="Optional. The money (after the mortgage and selling costs) goes into your savings." value={h.sellAge} onChange={(v) => upd({ sellAge: v })} suffix="years" />
               </Card>
@@ -365,7 +410,16 @@ export default function PlannerWizard({ onPlanChange }: { onPlanChange?: (plan: 
           <button type="button" className="wizard-add" onClick={() => set({ homes: [...a.homes, { name: a.homes.length ? `Property ${a.homes.length + 1}` : 'Home' }] })}>
             + Add {a.homes.length ? 'another property' : 'your home'}
           </button>
-          {!a.homes.length && <p className="wizard-help">Renting or living with family? Just press Next.</p>}
+          {!a.homes.length && <p className="wizard-help">Renting or living with family? Skip the home and just add anything below.</p>}
+          <p className="wizard-q">Other things you own</p>
+          <div className="wizard-pair">
+            <Field id="wiz-car" label="Your car (or cars): what could it sell for?" value={a.car} onChange={(v) => set({ car: v })} prefix={cur} />
+            <Field id="wiz-carl" label="How much value does it lose each year?" help="Cars usually lose about 10 to 15% a year." value={a.carLossPct} onChange={(v) => set({ carLossPct: v })} suffix="% a year" placeholder="10" />
+          </div>
+          <div className="wizard-pair">
+            <Field id="wiz-val" label="Jewellery, art or other valuables" value={a.valuables} onChange={(v) => set({ valuables: v })} prefix={cur} />
+            <Field id="wiz-valc" label="Change in value each year" help="Leave blank to keep it the same." value={a.valuablesChangePct} onChange={(v) => set({ valuablesChangePct: v })} suffix="% a year" placeholder="0" />
+          </div>
         </>
       ),
     },
@@ -435,10 +489,27 @@ export default function PlannerWizard({ onPlanChange }: { onPlanChange?: (plan: 
                   <Field id={`wiz-fm-${i}`} label="Costs each month" value={f.monthly} onChange={(v) => upd({ monthly: v })} prefix={cur} />
                   <Field id={`wiz-fy-${i}`} label="For about how many more years?" value={f.years} onChange={(v) => upd({ years: v })} suffix="years" placeholder="e.g. 10" />
                 </div>
+                <Field id={`wiz-fs-${i}`} label="Starting in how many years?" help="Blank if it's already happening. For example university costs that start in 5 years." value={f.startIn} onChange={(v) => upd({ startIn: v })} suffix="years" placeholder="0" />
               </Card>
             );
           })}
           <button type="button" className="wizard-add" onClick={() => set({ family: [...a.family, { kind: 'child' }] })}>+ Add a child, parent or pet</button>
+          <p className="wizard-help">Their costs rise with inflation each year and stop after the years you set.</p>
+          <p className="wizard-q">Other regular costs</p>
+          <p className="wizard-help">Things not in everyday spending, such as travel, private health insurance, school fees or a gym.</p>
+          {(a.otherCosts ?? []).map((x, i) => {
+            const upd = (p: Partial<OtherCost>) => set({ otherCosts: (a.otherCosts ?? []).map((y, j) => (j === i ? { ...y, ...p } : y)) });
+            return (
+              <Card key={i} title={x.name || 'Other cost'} onRemove={() => set({ otherCosts: (a.otherCosts ?? []).filter((_, j) => j !== i) })}>
+                <TextField id={`wiz-ocn-${i}`} label="What is it?" value={x.name} onChange={(v) => upd({ name: v })} placeholder="e.g. Travel" />
+                <div className="wizard-pair">
+                  <Field id={`wiz-ocm-${i}`} label="Costs each month" value={x.monthly} onChange={(v) => upd({ monthly: v })} prefix={cur} />
+                  <Field id={`wiz-ocy-${i}`} label="For how many years?" help="Blank if it carries on." value={x.years} onChange={(v) => upd({ years: v })} suffix="years" />
+                </div>
+              </Card>
+            );
+          })}
+          <button type="button" className="wizard-add" onClick={() => set({ otherCosts: [...(a.otherCosts ?? []), { name: '' }] })}>+ Add another regular cost</button>
         </>
       ),
     },
@@ -461,11 +532,16 @@ export default function PlannerWizard({ onPlanChange }: { onPlanChange?: (plan: 
       ),
     },
     {
-      icon: '🎯', title: 'Your goal',
-      why: 'Optional. A number to aim for, so you can see whether you\'re on track.',
+      icon: '🎯', title: 'Your goal and a few assumptions',
+      why: 'Optional. A number to aim for, and how fast prices rise. Leave them blank to use sensible defaults.',
       optional: true,
       body: (
-        <Field id="wiz-goal" label="How much would you like to have by the time you stop working?" help="Everything you own minus what you owe, in today's money. Leave blank to skip." value={a.goal} onChange={(v) => set({ goal: v })} prefix={cur} />
+        <>
+          <Field id="wiz-goal" label="How much would you like to have by the time you stop working?" help="Everything you own minus what you owe, in today's money. Leave blank to skip." value={a.goal} onChange={(v) => set({ goal: v })} prefix={cur} />
+          <Field id="wiz-infl" label="How fast do you expect prices to rise each year (inflation)?"
+            help={`Leave blank for ${c.inflationPct}%. Your pay, costs and pensions rise by this much each year, and results are shown in today's money so they're easy to compare.`}
+            value={a.inflationPct} onChange={(v) => set({ inflationPct: v === undefined ? undefined : Math.min(20, v) })} suffix="% a year" placeholder={String(c.inflationPct)} />
+        </>
       ),
     },
   ];
@@ -582,7 +658,7 @@ function PlanPreview({ answers, plan, money, onFinish, cashflowKnown }: { answer
   return (
     <aside className="wizard-preview no-print" aria-label="Your plan so far">
       <p className="wizard-preview-title">✨ Your plan so far</p>
-      {!r || !atRet ? (
+      {!r || !atRet || (r.today.assets === 0 && r.today.income.length === 0) ? (
         <div className="wizard-preview-empty">
           <p>Your picture builds here as you answer.</p>
           <ol>

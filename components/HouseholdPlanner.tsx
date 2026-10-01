@@ -81,7 +81,7 @@ const OWNERS: Record<Owner, string> = { you: 'You', partner: 'Partner', joint: '
 
 const NEW_ITEMS: { [K in ListKey]: (country: CountryCode) => Item<K> } = {
   investments: () => ({ name: 'Investment', kind: 'shares', owner: 'you', balance: 0, returnPct: 6, feesPct: 0.3, monthlyContribution: 0, contributionsStopAtRetirement: true, taxTreatment: 'returns_after_tax', taxRatePct: 0 }),
-  properties: () => ({ name: 'Property', value: 0, growthPct: 3, mortgageBalance: 0, mortgageRatePct: 5.5, monthlyRepayment: 0, monthlyNetRent: 0 }),
+  properties: () => ({ name: 'Property', value: 0, growthPct: 3, mortgageBalance: 0, mortgageRatePct: 5.5, monthlyRepayment: 0, monthlyNetRent: 0, monthlyCosts: 0 }),
   otherAssets: () => ({ name: 'Asset', kind: 'other', value: 0 }),
   debts: () => ({ name: 'Loan', balance: 0, ratePct: 8, monthlyPayment: 0 }),
   incomes: () => ({ name: 'Dividends', kind: 'dividends', owner: 'you', monthlyAmount: 0, risesWithInflation: true }),
@@ -560,7 +560,7 @@ export default function HouseholdPlanner() {
           <AddButton label="Add investment" onClick={() => addItem('investments')} />
         </Section>
 
-        <Section legend="Property" note="Enter the market value and the mortgage separately. To sell or downsize, add a one-off event below.">
+        <Section legend="Property" note="Enter what it could sell for and what you still owe separately. Growth is how much its value rises each year. Running costs cover rates, insurance and repairs.">
           <div className="asset-list">
             {plan.properties.map((p, i) => (
               <Card key={i} title={p.name || 'Property'} onRemove={() => removeItem('properties', i)}>
@@ -579,6 +579,8 @@ export default function HouseholdPlanner() {
                   <Num id={`prop-${i}-rp`} label="Repayment" unit="/mo" step={50} value={p.monthlyRepayment} onChange={(v) => setItem('properties', i, { monthlyRepayment: v as number })} />
                   <Num id={`prop-${i}-rent`} label="Rent received" unit="/mo" step={50} value={p.monthlyNetRent} onChange={(v) => setItem('properties', i, { monthlyNetRent: v as number })} />
                 </div>
+                <Num id={`prop-${i}-costs`} label="Running costs" unit="/mo" step={50} value={p.monthlyCosts} onChange={(v) => setItem('properties', i, { monthlyCosts: v as number })}
+                  hint="Rates, insurance, repairs and upkeep. Stops if you sell. Don't count these in living costs too." />
                 <Num id={`prop-${i}-sell`} label="Plan to sell at age" optional value={linkedEvent('sell_property', p.name)?.atAge}
                   onChange={(v) => setLinkedEvent('sell_property', p.name, { atAge: v })}
                   hint="Optional. Leave blank to keep it. Downsizing or selling costs: see One-off events." />

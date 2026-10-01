@@ -314,5 +314,72 @@
         "PREVIOUS PROJECTION"
       ]
     }
+  },
+  {
+    "id": "review-shared-plan",
+    "country": "NZ",
+    "plan": {
+      "you": {
+        "currentAge": 55,
+        "retirementAge": 65
+      },
+      "cashOnHand": 5000,
+      "investments": [
+        {
+          "name": "US shares",
+          "balance": 200000,
+          "returnPct": 7,
+          "currency": "USD"
+        },
+        {
+          "name": "KiwiSaver",
+          "kind": "kiwisaver",
+          "balance": 150000,
+          "returnPct": 6,
+          "monthlyContribution": 500
+        }
+      ],
+      "fx": [
+        {
+          "currency": "USD",
+          "rate": 1.7
+        }
+      ],
+      "incomes": [
+        {
+          "name": "Take-home pay",
+          "kind": "salary",
+          "monthlyAmount": 7000
+        }
+      ],
+      "livingExpensesMonthly": 4500
+    },
+    "question": "Review my plan against well-known investing principles and tell me where I could improve.",
+    "expect": {
+      "tools": [
+        "projectHousehold",
+        "getInformation"
+      ],
+      "maxCalls": {
+        "projectHousehold": 1
+      },
+      "toolArgs": [
+        {
+          "tool": "projectHousehold",
+          "path": "investments.0.balance",
+          "equals": 200000
+        }
+      ],
+      "mustCite": true,
+      "mustIncludeAny": [
+        "FIF",
+        "foreign investment fund",
+        "overseas shares"
+      ],
+      "mustNotInclude": [
+        "you should buy",
+        "you should sell"
+      ]
+    }
   }
 ]

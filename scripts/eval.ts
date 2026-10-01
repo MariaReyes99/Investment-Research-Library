@@ -26,7 +26,7 @@ type Expect = {
   mustIncludeAny?: string[];
   mustNotInclude?: string[];
 };
-type Case = { id: string; country: string; retireIn?: string; history?: unknown[]; question: string; expect: Expect };
+type Case = { id: string; country: string; retireIn?: string; history?: unknown[]; plan?: unknown; question: string; expect: Expect };
 type ToolCall = { toolName: string; args: Record<string, unknown> };
 
 const BASE = (process.env.EVAL_URL ?? 'http://localhost:3000').replace(/\/$/, '');
@@ -94,7 +94,7 @@ async function main() {
       const res = await fetch(`${BASE}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: [...(c.history ?? []), { role: 'user', content: c.question }], country: c.country, retireIn: c.retireIn }),
+        body: JSON.stringify({ messages: [...(c.history ?? []), { role: 'user', content: c.question }], country: c.country, retireIn: c.retireIn, plan: c.plan }),
       });
       status = res.status;
       body = await res.text();

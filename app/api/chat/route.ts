@@ -28,6 +28,7 @@ import {
   SYSTEM_PROMPT,
   PERSONAL_ADVICE_STEER,
   countryContext,
+  sharedPlanContext,
   REWRITE_INSTRUCTION,
   isPersonalAdviceRequest,
   outputRedFlags,
@@ -91,6 +92,13 @@ export async function POST(req: Request) {
   const requestedCountry = (body.data as { country?: unknown } | null)?.country;
   const country = isCountry(requestedCountry) ? requestedCountry : DEFAULT_COUNTRY;
   const requestedRetireIn = (body.data as { retireIn?: unknown } | null)?.retireIn;
+  // The user's own projector plan, only sent when they switch on "Include my plan"
+  const sharedPlan = HouseholdInputSchema.safeParse((body.data as { plan?: unknown } | null)?.plan);
+  let planNote = '';
+  if (sharedPlan.success) {
+    const json = JSON.stringify(sharedPlan.data, (key, value) => (key === 'name' && typeof value === 'string' ? redactPII(value).clean : value));
+    if (json.length <= 12_000) planNote = sharedPlanContext(json);
+  }
   const retireIn = isCountry(requestedRetireIn) && requestedRetireIn !== country ? requestedRetireIn : null;
   if (!cleaned.ok) return text(cleaned.message, cleaned.status);
 
@@ -127,7 +135,7 @@ export async function POST(req: Request) {
   const latestText = messages[messages.length - 1].content;
   const holdForCheck = isPersonalAdviceRequest(latestText);
   const amountsIn = currencyCountryIn(latestText);
-  const system = [SYSTEM_PROMPT, countryContext(country, amountsIn, retireIn), holdForCheck ? PERSONAL_ADVICE_STEER : ''].filter(Boolean).join('\n\n');
+  const system = [SYSTEM_PROMPT, countryContext(country, amountsIn, retireIn), planNote, holdForCheck ? PERSONAL_ADVICE_STEER : ''].filter(Boolean).join('\n\n');
 
   // An anonymous, hashed id lets OpenAI trace abuse without any personal details.
   const openaiUser = createHash('sha256').update(`openai:${viewer.key}`).digest('hex').slice(0, 32);

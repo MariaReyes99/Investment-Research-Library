@@ -69,7 +69,8 @@ export const PropertySchema = z.object({
   mortgageBalance: amount.default(0),
   mortgageRatePct: z.number().min(0).max(25).default(5.5),
   monthlyRepayment: monthly.default(0),
-  monthlyNetRent: monthly.default(0).describe('Rent received after rates, insurance and upkeep'),
+  monthlyNetRent: monthly.default(0).describe('Rent received each month (before the running costs below)'),
+  monthlyCosts: monthly.default(0).describe('Running costs you pay each month: rates, insurance, repairs and upkeep. Stop when the property is sold.'),
   currency,
 });
 
@@ -561,6 +562,9 @@ function simulate(h: Household, o: SimOptions): SimResult {
       }
     }
     let spending = living;
+    h.properties.forEach((p, k) => {
+      if (!sold[k] && p.monthlyCosts > 0) spending += p.monthlyCosts * f * fxAt(p.currency, m);
+    });
     for (const dep of h.dependants) {
       if (yearsFromNow >= dep.startInYears && yearsFromNow < dep.startInYears + dep.years) spending += dep.monthlyCost * f * fxAt(dep.currency, m);
     }
@@ -714,6 +718,8 @@ function todaysCashflow(h: Household) {
     ? cv(h.retirementLivingExpensesMonthly, retirementCurrency(h))
     : h.livingExpensesMonthly;
   if (living > 0) outgoings.push({ label: 'Living costs', amount: living });
+  const propertyCosts = sum(h.properties.map((p) => cv(p.monthlyCosts, p.currency)));
+  if (propertyCosts > 0) outgoings.push({ label: 'Property costs', amount: propertyCosts });
   const deps = sum(h.dependants.filter((d) => d.startInYears === 0 && d.years > 0).map((d) => cv(d.monthlyCost, d.currency)));
   if (deps > 0) outgoings.push({ label: 'Dependants', amount: deps });
   const other = sum(h.otherExpenses.filter((e) => e.startInYears === 0 && (e.years === undefined || e.years > 0)).map((e) => cv(e.monthlyAmount, e.currency)));

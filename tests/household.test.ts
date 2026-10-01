@@ -392,3 +392,38 @@ test('guided answers handle money in other countries, sales and cash-outs', () =
   const r = projectHousehold(plan, { monteCarlo: false });
   near(r.today.assets, 50_000 * 1.7 + 5_000_000 * 0.03, 1);
 });
+
+test('property running costs are paid while owned and stop when sold', () => {
+  const r = projectHousehold({
+    you: { currentAge: 60, retirementAge: 70 }, endAge: 63, inflationPct: 0, surplusReturnPct: 0,
+    incomes: [{ name: 'Pay', kind: 'salary', monthlyAmount: 1_000 }],
+    properties: [{ name: 'Bach', value: 300_000, growthPct: 0, monthlyCosts: 400 }],
+    events: [{ name: 'Sell Bach', kind: 'sell_property', atAge: 62, propertyName: 'Bach', sellingCostsPct: 0 }],
+  }, { monteCarlo: false });
+  const s = r.scenarios[1].series;
+  near(s[1].spending, 4_800, 0.01);
+  near(s[3].spending, 0, 0.01);
+  assert.ok(r.today.outgoings.some((l) => l.label === 'Property costs' && l.amount === 400));
+});
+
+test('guided growth, fees, property costs, car, valuables, other costs and inflation reach the plan', () => {
+  const plan = answersToPlan({
+    who: 'me', age: 50,
+    savings: [{ name: 'ETF', kind: 'investments', amount: 100_000, style: 'balanced', growthPct: 8, feesPct: 0.2 }],
+    homes: [{ name: 'Home', worth: 700_000, growthPct: 4, yearlyCosts: 6_000 }],
+    car: 30_000, carLossPct: 15, valuables: 20_000,
+    family: [{ kind: 'child', monthly: 500, years: 4, startIn: 5 }],
+    otherCosts: [{ name: 'Travel', monthly: 300 }],
+    inflationPct: 3,
+  }, 'NZ', null);
+  assert.equal(plan.investments?.[0].returnPct, 8);
+  assert.equal(plan.investments?.[0].feesPct, 0.2);
+  assert.equal(plan.properties?.[0].growthPct, 4);
+  assert.equal(plan.properties?.[0].monthlyCosts, 500);
+  assert.deepEqual(plan.otherAssets?.map((x) => [x.name, x.changePct]), [['Car', -15], ['Valuables', 0]]);
+  assert.equal(plan.dependants?.[0].startInYears, 5);
+  assert.equal(plan.otherExpenses?.[0].monthlyAmount, 300);
+  assert.equal(plan.inflationPct, 3);
+  const r = projectHousehold(plan, { monteCarlo: false });
+  assert.ok(r.today.outgoings.some((l) => l.label === 'Property costs'));
+});
