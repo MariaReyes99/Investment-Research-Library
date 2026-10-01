@@ -124,13 +124,6 @@ function SavedPlansTools({ plan, onLoad }: { plan: HouseholdInput; onLoad: (p: H
     <section className="saved-plans no-print" aria-labelledby="saved-title">
       <div className="saved-plans-head">
         <h2 id="saved-title">Save and compare plans</h2>
-        <button type="button" className="plan-button is-secondary print-button" onClick={() => {
-          // Open every collapsed section so the PDF includes it
-          document.querySelectorAll<HTMLDetailsElement>('.calc-results details').forEach((d) => { d.open = true; });
-          window.print();
-        }}>
-          Print or save as PDF
-        </button>
       </div>
       <p className="asset-editor-note">Plans are saved in this browser only, without a password. Nothing is sent to us.</p>
       <p className="shared-device-warning" role="note">

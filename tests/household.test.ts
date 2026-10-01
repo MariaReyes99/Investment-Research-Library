@@ -331,10 +331,10 @@ test('guided answers become a full plan', () => {
   const plan = answersToPlan({
     who: 'couple', age: 45, partnerAge: 43, bank: 10_000,
     savings: [{ name: 'KiwiSaver', kind: 'retirement', amount: 80_000, monthly: 400, style: 'growth' }],
-    homes: [{ name: 'Home', worth: 800_000, owe: 300_000, payment: 2_200 }],
+    homes: [{ name: 'Home', worth: 800_000, owe: 300_000, payment: 2_200, sellAge: 70 }],
     pay: 6_000, partnerPay: 4_000, pension: 1_800, spending: 5_000,
     family: [{ kind: 'child', monthly: 600, years: 8 }],
-    sellHomeAge: 70, goal: 1_500_000,
+    goal: 1_500_000,
   }, 'NZ', null);
   assert.equal(plan.you.retirementAge, 65);
   assert.equal(plan.partner?.currentAge, 43);
@@ -350,4 +350,45 @@ test('blank guided answers still give a valid plan', () => {
   const r = projectHousehold(answersToPlan({ who: 'me', age: 30, savings: [], homes: [], family: [] }, 'PH', null), { monteCarlo: false });
   assert.equal(r.inputs.country, 'PH');
   assert.equal(r.today.netWorth, 0);
+});
+
+test('cashing out part of an investment moves it into savings at the chosen age', () => {
+  const r = projectHousehold({
+    you: { currentAge: 50, retirementAge: 70 }, endAge: 53, inflationPct: 0, surplusReturnPct: 0,
+    investments: [{ name: 'Overseas shares', balance: 100_000, returnPct: 0, currency: 'USD' }],
+    fx: [{ currency: 'USD', rate: 1.6 }],
+    events: [{ name: 'Cash out half', kind: 'sell_investment', atAge: 52, investmentName: 'Overseas shares', sharePct: 50 }],
+  }, { monteCarlo: false });
+  const s = r.scenarios[1].series;
+  near(s[2].investments, 160_000, 0.01); // nothing sold yet (USD 100k at 1.6)
+  near(s[3].investments, 160_000, 0.01); // half moved into savings, still counted as investments
+  near(s[3].events, 80_000, 0.01);
+});
+
+test('cashing out a retirement account before its access age is skipped with a warning', () => {
+  const r = projectHousehold({
+    you: { currentAge: 50, retirementAge: 70 }, endAge: 53, inflationPct: 0,
+    investments: [{ name: 'KiwiSaver', kind: 'kiwisaver', balance: 50_000, returnPct: 0 }],
+    events: [{ name: 'Cash out KiwiSaver', kind: 'sell_investment', atAge: 52, investmentName: 'KiwiSaver' }],
+  }, { monteCarlo: false });
+  near(r.scenarios[1].series[3].events, 0, 0.01);
+  assert.ok(r.warnings.some((w) => w.includes("can't be withdrawn until age 65")));
+});
+
+test('guided answers handle money in other countries, sales and cash-outs', () => {
+  const plan = answersToPlan({
+    who: 'me', age: 40, abroad: true,
+    savings: [{ name: 'US shares', kind: 'investments', amount: 50_000, style: 'growth', currency: 'USD', cashOutAge: 60, cashOutPct: 50 }],
+    homes: [{ name: 'Cebu house', worth: 5_000_000, currency: 'PHP', sellAge: 62 }],
+    foreignPensions: [{ country: 'UK', monthly: 600, owner: 'you' }],
+    family: [],
+  }, 'NZ', 'PH', { USD: 1.7, PHP: 0.03, GBP: 2.2 });
+  assert.equal(plan.investments?.[0].currency, 'USD');
+  assert.equal(plan.properties?.[0].currency, 'PHP');
+  assert.equal(plan.incomes?.[0].currency, 'GBP');
+  assert.deepEqual(plan.fx?.map((f) => f.currency).sort(), ['GBP', 'PHP', 'USD']);
+  assert.equal(plan.fx?.find((f) => f.currency === 'USD')?.rate, 1.7);
+  assert.deepEqual(plan.events?.map((ev) => ev.kind).sort(), ['sell_investment', 'sell_property']);
+  const r = projectHousehold(plan, { monteCarlo: false });
+  near(r.today.assets, 50_000 * 1.7 + 5_000_000 * 0.03, 1);
 });

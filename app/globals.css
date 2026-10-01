@@ -780,3 +780,68 @@ img, svg, canvas, video { max-width: 100%; }
 .start-again-row span { color: var(--muted); font-size: 12px; }
 .wizard-count-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 14px; }
 .wizard-count-row .wizard-count { margin: 0; }
+
+/* Download, open and print */
+.plan-files { display: grid; gap: 10px; margin: 16px 0 0; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: #fbfcf9; }
+.plan-files strong { color: var(--ink); font-size: 15px; }
+.plan-files p { margin: 0; }
+.plan-files-buttons { display: flex; flex-wrap: wrap; gap: 10px; }
+.plan-files .wizard-button { min-height: 42px; padding: 0 16px; font-size: 14px; }
+.plan-files.is-locked > .wizard-button { justify-self: start; }
+.wizard-select { padding: 12px !important; font-size: 15px !important; border-radius: 10px !important; }
+@media print {
+	.projector-tabs, .wizard-nav, .wizard-progress, .wizard-count-row, .wizard-privacy, .plan-files, .platform-explorer, .start-again-row { display: none !important; }
+	.wizard { border: 0; box-shadow: none; padding: 0; }
+}
+
+/* ---------- Wider projector page with a live preview ---------- */
+.page-main.is-wide { width: min(1360px, 100%); }
+.page-main.is-wide .page-lede { max-width: 70ch; }
+.projector-tabs { max-width: none; }
+.wizard-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 400px); gap: 24px; align-items: start; }
+.wizard-layout .wizard { max-width: none; margin: 0 0 34px; }
+.wizard-results { max-width: none; }
+.wizard-preview { position: sticky; top: 16px; display: grid; gap: 12px; padding: 20px; border: 1px solid var(--line); border-radius: 18px; background: linear-gradient(180deg, #f7faf3, #fff 40%); box-shadow: 0 10px 30px rgba(38, 50, 44, 0.05); }
+.wizard-preview-title { margin: 0; color: var(--ink); font-family: Georgia, "Palatino Linotype", serif; font-size: 20px; }
+.wizard-preview-empty p { margin: 0 0 8px; color: #556052; font-size: 14px; }
+.wizard-preview-empty ol { margin: 0; padding-left: 20px; color: #66705f; font-size: 13.5px; line-height: 1.8; }
+.wizard-preview-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.wizard-preview-stats > div { display: grid; gap: 2px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.wizard-preview-stats span { color: var(--muted); font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; }
+.wizard-preview-stats strong { color: var(--ink); font-family: Georgia, "Palatino Linotype", serif; font-size: 19px; font-weight: 400; }
+.wizard-preview-stats .is-good { border-color: #b8d6bf; background: #f2faf4; }
+.wizard-preview-stats .is-good strong { color: #2f6b45; }
+.wizard-preview-stats .is-watch { border-color: #ecd2b5; background: #fff8f0; }
+.wizard-preview .projection-figure figcaption { display: none; }
+.wizard-preview > .wizard-button { justify-self: start; }
+/* Tablets and phones: one column; the live preview is hidden to keep the steps simple */
+@media (max-width: 1100px) {
+	.wizard-layout { grid-template-columns: 1fr; }
+	.wizard-preview { display: none; }
+}
+.wizard-preview-wait { grid-column: 1 / -1; }
+.wizard-preview-wait p { margin: 2px 0 0; color: #66705f; font-size: 12.5px; line-height: 1.5; }
+
+/* ---------- Chat page that adjusts to the screen ---------- */
+@media (min-width: 761px) {
+	/* Sidebar grows a little with the screen */
+	.guide-shell { grid-template-columns: clamp(232px, 17vw, 300px) minmax(0, 1fr); }
+	/* Headline and brand scale smoothly instead of jumping */
+	.welcome-panel h1 { font-size: clamp(36px, 3.3vw, 60px); }
+	.welcome-copy { max-width: clamp(380px, 34vw, 560px); font-size: clamp(13px, 0.9vw, 15px); }
+	.brand-copy strong { font-size: clamp(15px, 1.1vw, 18px); }
+}
+/* Laptops: a wider conversation so charts and tables have room */
+@media (min-width: 1280px) {
+	.conversation-column { width: min(1100px, 100%); padding-left: clamp(32px, 3vw, 64px); padding-right: clamp(32px, 3vw, 64px); }
+	.message-bubble, .composer input { font-size: 14px; }
+}
+/* Large monitors: wider again, with slightly larger text */
+@media (min-width: 1600px) {
+	.conversation-column { width: min(1280px, 100%); }
+	.message-bubble, .composer input { font-size: 15px; }
+	.composer { min-height: 62px; }
+	.suggestion-chip { font-size: 13px; }
+}
+/* Keep long lines of answer text comfortable to read; charts and tables use the full width */
+.markdown-body > p, .markdown-body > ul, .markdown-body > ol, .markdown-body > blockquote { max-width: 82ch; }

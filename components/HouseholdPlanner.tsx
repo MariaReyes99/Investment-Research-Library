@@ -12,6 +12,7 @@ import { COUNTRIES, COUNTRY_CODES, moneyFor, profile, type CountryCode } from '.
 import { HouseholdAnalysisView, HouseholdChart, HouseholdComparison, HouseholdHeadline, HouseholdMilestones, HouseholdWarnings } from './HouseholdCharts';
 import { BasisLabel, CountrySelect, RetireInSelect, useCountry, useRetireIn } from './CountryPicker';
 import SavedPlans from './SavedPlans';
+import PlanFileActions from './PlanFileActions';
 import ClearDeviceData from './ClearDeviceData';
 import { usePlan } from './usePlan';
 import { canSavePlans } from '../lib/plans';
@@ -71,7 +72,7 @@ const incomeKinds = (country: CountryCode) => ({
   pension: `Pension / ${profile(country).pension.name}`, annuity: 'Annuity', other: 'Other',
 });
 const DEPENDANT_KINDS = { child: 'Child', parent: 'Parent', pet: 'Pet', other: 'Other' };
-const EVENT_KINDS = { money_in: 'Money in (inheritance, lump sum)', money_out: 'Money out (renovation, car, wedding)', sell_property: 'Sell or downsize a property' };
+const EVENT_KINDS = { money_in: 'Money in (inheritance, lump sum)', money_out: 'Money out (renovation, car, wedding)', sell_property: 'Sell or downsize a property', sell_investment: 'Cash out an investment' };
 const WITHDRAWAL_KINDS = { needs: 'Spend my retirement living costs', percent: 'Spend a fixed % of savings each year', guardrails: 'Flexible (guardrails)' };
 const OWNERS: Record<Owner, string> = { you: 'You', partner: 'Partner', joint: 'Joint' };
 
@@ -83,7 +84,7 @@ const NEW_ITEMS: { [K in ListKey]: (country: CountryCode) => Item<K> } = {
   incomes: () => ({ name: 'Dividends', kind: 'dividends', owner: 'you', monthlyAmount: 0, risesWithInflation: true }),
   dependants: () => ({ name: 'Child', kind: 'child', monthlyCost: 800, years: 10, startInYears: 0 }),
   otherExpenses: () => ({ name: 'Expense', monthlyAmount: 0, startInYears: 0 }),
-  events: () => ({ name: 'Inheritance', kind: 'money_in', atAge: 70, amount: 100_000, replacementValue: 0, sellingCostsPct: 3 }),
+  events: () => ({ name: 'Inheritance', kind: 'money_in', atAge: 70, amount: 0, replacementValue: 0, sellingCostsPct: 3, sharePct: 100 }),
   compare: () => ({ label: 'Assumption', investmentReturnPct: 6 }),
 };
 
@@ -376,6 +377,35 @@ export default function HouseholdPlanner() {
   const setItem = <K extends ListKey>(key: K, index: number, patch: Partial<Item<K>>) =>
     edit((p) => ({ ...p, [key]: (p[key] as Item<K>[]).map((item, i) => (i === index ? { ...item, ...patch } : item)) }));
   const addItem = <K extends ListKey>(key: K) => edit((p) => ({ ...p, [key]: [...(p[key] as Item<K>[]), NEW_ITEMS[key](p.country)] }));
+  /** The sale or cash-out event linked to a property or investment, if there is one. */
+  const linkedEvent = (kind: 'sell_property' | 'sell_investment', name: string) =>
+    plan.events.find((ev) => ev.kind === kind && (kind === 'sell_property' ? ev.propertyName : ev.investmentName) === name);
+  /** Adds, updates or removes the linked event. Blank age removes it. */
+  const setLinkedEvent = (kind: 'sell_property' | 'sell_investment', name: string, patch: { atAge?: number; sharePct?: number }) =>
+    edit((p) => {
+      const matches = (ev: Draft['events'][number]) => ev.kind === kind && (kind === 'sell_property' ? ev.propertyName : ev.investmentName) === name;
+      const existing = p.events.find(matches);
+      if ('atAge' in patch && patch.atAge === undefined) return { ...p, events: p.events.filter((ev) => !matches(ev)) };
+      if (existing) return { ...p, events: p.events.map((ev) => (matches(ev) ? { ...ev, ...patch, atAge: patch.atAge ?? ev.atAge, sharePct: patch.sharePct ?? ev.sharePct } : ev)) };
+      if (patch.atAge === undefined || !Number.isFinite(patch.atAge)) return p;
+      return {
+        ...p,
+        events: [...p.events, {
+          name: kind === 'sell_property' ? `Sell ${name}` : `Cash out ${name}`, kind, atAge: patch.atAge, amount: 0,
+          propertyName: kind === 'sell_property' ? name : undefined, investmentName: kind === 'sell_investment' ? name : undefined,
+          sharePct: patch.sharePct ?? 100, replacementValue: 0, sellingCostsPct: 3,
+        }],
+      };
+    });
+  /** Renaming a property or investment keeps its linked events attached. */
+  const renameLinked = (kind: 'sell_property' | 'sell_investment', from: string, to: string) => (ev: Draft['events'][number]) => {
+    if (ev.kind !== kind) return ev;
+    const linked = kind === 'sell_property' ? ev.propertyName : ev.investmentName;
+    if (linked !== from) return ev;
+    const prefix = kind === 'sell_property' ? 'Sell' : 'Cash out';
+    return { ...ev, [kind === 'sell_property' ? 'propertyName' : 'investmentName']: to, name: ev.name === `${prefix} ${from}` ? `${prefix} ${to}` : ev.name };
+  };
+
   const removeItem = (key: ListKey, index: number) =>
     edit((p) => ({ ...p, [key]: (p[key] as unknown[]).filter((_, i) => i !== index) }));
 
@@ -445,7 +475,7 @@ export default function HouseholdPlanner() {
           <button type="button" className="start-again" onClick={() => startAgain()}>🧹 Start again</button>
           <span>Clears every field on this screen</span>
         </div>
-        {loadedFromChat && <p className="privacy-notice" role="status">Loaded the numbers from your chat answer. Change anything below.</p>}
+        {loadedFromChat && <p className="privacy-notice" role="status">Your answers are filled in below. Change anything you like.</p>}
 
         <Section legend="Who's in the plan">
           <CountrySelect id="plan-country" value={plan.country} onChange={changeCountry} />
@@ -479,7 +509,8 @@ export default function HouseholdPlanner() {
           <div className="asset-list">
             {plan.investments.map((inv, i) => (
               <Card key={i} title={inv.name || 'Investment'} onRemove={() => removeItem('investments', i)}>
-                <Text id={`inv-${i}-name`} label="Name" value={inv.name} onChange={(v) => setItem('investments', i, { name: v })} />
+                <Text id={`inv-${i}-name`} label="Name" value={inv.name}
+                  onChange={(v) => edit((p) => ({ ...p, investments: p.investments.map((x, j) => (j === i ? { ...x, name: v } : x)), events: p.events.map(renameLinked('sell_investment', inv.name, v)) }))} />
                 <Pick id={`inv-${i}-kind`} label="Type" value={inv.kind} options={investmentKinds(plan.country)}
                   onChange={(v) => setItem('investments', i, { kind: v, ...(taxPreset(plan.country, v) ?? {}) })} />
                 {ownerPicker(`inv-${i}-owner`, inv.owner, (v) => setItem('investments', i, { owner: v }))}
@@ -491,6 +522,12 @@ export default function HouseholdPlanner() {
                 </div>
                 <Num id={`inv-${i}-con`} label="Monthly contribution" unit={unitOf(inv.currency)} step={50} value={inv.monthlyContribution} onChange={(v) => setItem('investments', i, { monthlyContribution: v as number })} />
                 <Check label="Contributions stop at retirement" checked={inv.contributionsStopAtRetirement} onChange={(v) => setItem('investments', i, { contributionsStopAtRetirement: v })} />
+                <div className="planner-pair">
+                  <Num id={`inv-${i}-sell`} label="Cash out at age" optional value={linkedEvent('sell_investment', inv.name)?.atAge}
+                    onChange={(v) => setLinkedEvent('sell_investment', inv.name, { atAge: v })} hint="Optional. Blank = keep it" />
+                  <Num id={`inv-${i}-share`} label="How much" unit="%" step={5} optional value={linkedEvent('sell_investment', inv.name)?.sharePct}
+                    onChange={(v) => setLinkedEvent('sell_investment', inv.name, { sharePct: v ?? 100 })} hint="Blank = all of it" />
+                </div>
                 <details className="asset-advanced">
                   <summary>Tax and access</summary>
                   <Pick id={`inv-${i}-tax`} label="Tax treatment" value={inv.taxTreatment} options={TAX_LABELS} onChange={(v) => setItem('investments', i, { taxTreatment: v })} />
@@ -511,7 +548,8 @@ export default function HouseholdPlanner() {
           <div className="asset-list">
             {plan.properties.map((p, i) => (
               <Card key={i} title={p.name || 'Property'} onRemove={() => removeItem('properties', i)}>
-                <Text id={`prop-${i}-name`} label="Name" value={p.name} onChange={(v) => setItem('properties', i, { name: v })} />
+                <Text id={`prop-${i}-name`} label="Name" value={p.name}
+                  onChange={(v) => edit((d) => ({ ...d, properties: d.properties.map((x, j) => (j === i ? { ...x, name: v } : x)), events: d.events.map(renameLinked('sell_property', p.name, v)) }))} />
                 {currencyPicker(`prop-${i}-cur`, p.currency, (v) => setItem('properties', i, { currency: v }))}
                 <div className="planner-pair">
                   <Num id={`prop-${i}-val`} label="Could sell for" unit={unitOf(p.currency)} step={5000} value={p.value} onChange={(v) => setItem('properties', i, { value: v as number })} />
@@ -525,6 +563,9 @@ export default function HouseholdPlanner() {
                   <Num id={`prop-${i}-rp`} label="Repayment" unit="/mo" step={50} value={p.monthlyRepayment} onChange={(v) => setItem('properties', i, { monthlyRepayment: v as number })} />
                   <Num id={`prop-${i}-rent`} label="Rent received" unit="/mo" step={50} value={p.monthlyNetRent} onChange={(v) => setItem('properties', i, { monthlyNetRent: v as number })} />
                 </div>
+                <Num id={`prop-${i}-sell`} label="Plan to sell at age" optional value={linkedEvent('sell_property', p.name)?.atAge}
+                  onChange={(v) => setLinkedEvent('sell_property', p.name, { atAge: v })}
+                  hint="Optional. Leave blank to keep it. Downsizing or selling costs: see One-off events." />
               </Card>
             ))}
           </div>
@@ -652,7 +693,7 @@ export default function HouseholdPlanner() {
           <AddButton label="Add expense" onClick={() => addItem('otherExpenses')} />
         </Section>
 
-        <Section legend="One-off events" note="An inheritance, a renovation, or selling or downsizing a property at a set age.">
+        <Section legend="One-off events" note="An inheritance, a renovation, selling or downsizing a property, or cashing out an investment, each at the age you choose. Add as many as you like.">
           <div className="asset-list">
             {plan.events.map((ev, i) => (
               <Card key={i} title={ev.name || 'Event'} onRemove={() => removeItem('events', i)}>
@@ -660,15 +701,25 @@ export default function HouseholdPlanner() {
                 <Pick id={`ev-${i}-kind`} label="Type" value={ev.kind} options={EVENT_KINDS}
                   onChange={(v) => {
                     const propertyName = v === 'sell_property' ? ev.propertyName ?? propertyNames[0] : ev.propertyName;
+                    const investmentName = v === 'sell_investment' ? ev.investmentName ?? plan.investments[0]?.name : ev.investmentName;
                     // Rename events that still have a default name
-                    const defaults = ['Inheritance', 'Renovation', 'Event', ...propertyNames.map((n) => `Sell ${n}`)];
+                    const defaults = ['Inheritance', 'Renovation', 'Event', ...propertyNames.map((n) => `Sell ${n}`), ...plan.investments.map((x) => `Cash out ${x.name}`)];
                     const name = defaults.includes(ev.name)
-                      ? v === 'money_in' ? 'Inheritance' : v === 'money_out' ? 'Renovation' : `Sell ${propertyName ?? 'property'}`
+                      ? v === 'money_in' ? 'Inheritance' : v === 'money_out' ? 'Renovation' : v === 'sell_investment' ? `Cash out ${investmentName ?? 'investment'}` : `Sell ${propertyName ?? 'property'}`
                       : ev.name;
-                    setItem('events', i, { kind: v, propertyName, name });
+                    setItem('events', i, { kind: v, propertyName, investmentName, name });
                   }} />
                 <Num id={`ev-${i}-age`} label="At your age" value={ev.atAge} onChange={(v) => setItem('events', i, { atAge: v as number })} />
-                {ev.kind === 'sell_property' ? (
+                {ev.kind === 'sell_investment' ? (
+                  <>
+                    {plan.investments.length > 0 ? (
+                      <Pick id={`ev-${i}-inv`} label="Investment" value={ev.investmentName ?? plan.investments[0].name}
+                        options={Object.fromEntries(plan.investments.map((x) => [x.name, x.name]))}
+                        onChange={(v) => setItem('events', i, { investmentName: v, name: ev.name === `Cash out ${ev.investmentName ?? ''}` ? `Cash out ${v}` : ev.name })} />
+                    ) : <p className="asset-editor-note">Add an investment first.</p>}
+                    <Num id={`ev-${i}-share`} label="How much to cash out" unit="%" step={5} value={ev.sharePct} onChange={(v) => setItem('events', i, { sharePct: v as number })} hint="100 = all of it. The money joins your savings." />
+                  </>
+                ) : ev.kind === 'sell_property' ? (
                   <>
                     {propertyNames.length > 0 ? (
                       <Pick id={`ev-${i}-prop`} label="Property" value={ev.propertyName ?? propertyNames[0]}
@@ -804,6 +855,9 @@ export default function HouseholdPlanner() {
               <ul>{shown.assumptions.map((a) => <li key={a}>{a}</li>)}</ul>
             </details>
             <p className="disclaimer-note">{shown.disclaimer}</p>
+            <PlanFileActions
+              plan={HouseholdInputSchema.safeParse({ ...plan, compare: plan.compare.length ? plan.compare : undefined }).success ? { ...plan, compare: plan.compare.length ? plan.compare : undefined } : null}
+              onOpen={(p) => { const d = toDraft(p); if (d) { touched.current = true; setPlan(d); window.scrollTo({ top: 0, behavior: 'smooth' }); } }} />
             {account.loaded && (
               <SavedPlans plan={plan} canSave={canSave} signedIn={account.signedIn}
                 onLoad={(p) => { const d = toDraft(p); if (d) { touched.current = true; setPlan(d); } }} />

@@ -309,7 +309,7 @@ export function analyseHousehold(r: HouseholdResult): HouseholdAnalysis {
     const age = Math.min(Math.max(r.retirementAge, h.you.currentAge + 1), h.endAge - 1);
     tryLever(`Sell ${target.name} at ${age}`, `Sell it when you retire and invest the proceeds (after 3% selling costs and its mortgage)`, h.properties.length > 1 ? 'Loses any rent and future growth on that property; selling costs and tax may apply.' : 'You would need somewhere else to live; this is most relevant when downsizing.', {
       ...h,
-      events: [...h.events, { name: `Sell ${target.name}`, kind: 'sell_property', atAge: age, amount: 0, propertyName: target.name, replacementValue: 0, sellingCostsPct: 3 }],
+      events: [...h.events, { name: `Sell ${target.name}`, kind: 'sell_property', atAge: age, amount: 0, propertyName: target.name, replacementValue: 0, sellingCostsPct: 3, sharePct: 100 }],
     });
   }
 

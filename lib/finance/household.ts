@@ -119,11 +119,13 @@ export const ExpenseSchema = z.object({
 
 export const EventSchema = z.object({
   name,
-  kind: z.enum(['money_in', 'money_out', 'sell_property'])
-    .describe('money_in: inheritance, sale of a business, lump sum. money_out: renovation, car, wedding. sell_property: sell (or downsize) a property.'),
+  kind: z.enum(['money_in', 'money_out', 'sell_property', 'sell_investment'])
+    .describe('money_in: inheritance, sale of a business, lump sum. money_out: renovation, car, wedding. sell_property: sell (or downsize) a property. sell_investment: cash out all or part of an investment.'),
   atAge: z.number().int().min(16).max(110).describe('Your age when it happens'),
   amount: amount.default(0).describe("Money in or out, in today's money. Not used for sell_property."),
   propertyName: z.string().max(80).optional().describe('For sell_property: the property to sell'),
+  investmentName: z.string().max(80).optional().describe('For sell_investment: the investment to cash out'),
+  sharePct: z.number().min(1).max(100).default(100).describe('For sell_investment: how much of it to cash out, as a percentage'),
   replacementValue: amount.default(0).describe("For sell_property: price of a cheaper home bought instead (downsizing), in today's money. 0 = not replaced."),
   sellingCostsPct: z.number().min(0).max(15).default(3),
   currency,
@@ -474,6 +476,7 @@ function simulate(h: Household, o: SimOptions): SimResult {
     const f = infl(m);
     const yearsFromNow = m / 12;
     let eventNet = 0;
+    let eventTax = 0;
 
     // Monte Carlo: redraw returns each year
     if (o.yearShift && m % 12 === 0) {
@@ -489,6 +492,17 @@ function simulate(h: Household, o: SimOptions): SimResult {
         eventNet += e.amount * f * fxAt(e.currency, m);
       } else if (e.kind === 'money_out') {
         eventNet -= e.amount * f * fxAt(e.currency, m);
+      } else if (e.kind === 'sell_investment') {
+        // Cash out part or all of an investment; the money joins your savings
+        const j = h.investments.findIndex((i) => i.name === e.investmentName);
+        if (j < 0) return;
+        const access = accessAges[j];
+        if (access !== undefined && ageOf(h.investments[j].owner, m) < access) return;
+        const gross = inv[j] * (e.sharePct / 100);
+        const taxRate = h.investments[j].taxTreatment === 'taxed_on_withdrawal' ? h.investments[j].taxRatePct / 100 : 0;
+        inv[j] -= gross;
+        eventNet += gross * (1 - taxRate);
+        eventTax += gross * taxRate;
       } else {
         const j = h.properties.findIndex((p) => p.name === e.propertyName);
         const idx = j >= 0 ? j : h.properties.findIndex((_, q) => !sold[q]);
@@ -608,7 +622,7 @@ function simulate(h: Household, o: SimOptions): SimResult {
       spending: year.spending + spending / f,
       loan: year.loan + loan / f,
       contrib: year.contrib + contribOutflow / f,
-      tax: year.tax + tax / f,
+      tax: year.tax + (tax + eventTax) / f,
       events: year.events + eventNet / f,
       unmet: year.unmet + unmet / f,
     };
@@ -744,6 +758,17 @@ function warningsFor(h: Household, expected: HouseholdScenario, surplus: number)
   for (const e of h.events) {
     if (e.kind === 'sell_property' && e.propertyName && !h.properties.some((p) => p.name === e.propertyName)) {
       w.push(`${e.name}: no property is called "${e.propertyName}", so the first unsold property is used.`);
+    }
+    if (e.kind === 'sell_investment') {
+      const inv = h.investments.find((i) => i.name === e.investmentName);
+      if (!inv) w.push(`${e.name}: no investment is called "${e.investmentName ?? ''}", so nothing is cashed out.`);
+      else {
+        const access = investmentAccessAge(h, inv);
+        const person = inv.owner === 'partner' && h.partner ? h.partner : h.you;
+        if (access !== undefined && person.currentAge + (e.atAge - h.you.currentAge) < access) {
+          w.push(`${e.name}: ${inv.name} can't be withdrawn until age ${access}, so this is skipped. Choose a later age.`);
+        }
+      }
     }
     if (e.atAge <= h.you.currentAge || e.atAge >= h.endAge) w.push(`${e.name}: age ${e.atAge} is outside the plan, so it is ignored.`);
   }

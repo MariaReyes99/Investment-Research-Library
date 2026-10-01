@@ -12,7 +12,7 @@ export default function CalculatorPage() {
   return (
     <div className="page-shell">
       <SiteHeader current="calculator" />
-      <main className="page-main">
+      <main className="page-main is-wide">
         <h1 className="page-title">Wealth projector</h1>
         <p className="page-lede">
           See where your money could take you. Answer a few simple questions about what you have, what comes in and what goes

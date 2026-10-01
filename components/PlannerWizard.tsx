@@ -5,25 +5,30 @@
  * Everything stays on this device. At the end it shows the results, and
  * "See every detail" opens the same plan in the full form.
  */
-import { useMemo, useState, type ReactNode } from 'react';
-import { projectHousehold, type HouseholdInput } from '../lib/finance/household';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { CURRENCIES, projectHousehold, usedCurrencies, type Currency, type HouseholdInput } from '../lib/finance/household';
 import { analyseHousehold } from '../lib/finance/householdAnalysis';
 import { projectorLink } from '../lib/finance/householdLink';
-import { COUNTRIES, moneyFor, profile, type CountryCode } from '../lib/countries';
+import { COUNTRIES, COUNTRY_CODES, moneyFor, profile, type CountryCode } from '../lib/countries';
 import { BasisLabel, CountrySelect, RetireInSelect, useCountry, useRetireIn } from './CountryPicker';
 import { HouseholdAnalysisView, HouseholdChart, HouseholdWarnings } from './HouseholdCharts';
 import StatementImport from './StatementImport';
 import ClearDeviceData from './ClearDeviceData';
+import PlanFileActions from './PlanFileActions';
 
 type Style = 'careful' | 'balanced' | 'growth';
 const STYLE_RETURN: Record<Style, number> = { careful: 4, balanced: 5.5, growth: 7 };
 
-type Savings = { name: string; kind: 'retirement' | 'investments' | 'term' | 'other'; amount?: number; monthly?: number; style: Style };
-type Home = { name: string; worth?: number; owe?: number; payment?: number; rent?: number };
+type Savings = { name: string; kind: 'retirement' | 'investments' | 'term' | 'other'; amount?: number; monthly?: number; style: Style; currency?: Currency; cashOutAge?: number; cashOutPct?: number };
+type Home = { name: string; worth?: number; owe?: number; payment?: number; rent?: number; currency?: Currency; sellAge?: number };
+type ForeignPension = { country: CountryCode; monthly?: number; owner: 'you' | 'partner' };
 type Family = { kind: 'child' | 'parent' | 'pet'; monthly?: number; years?: number };
 
 export interface Answers {
   who: 'me' | 'couple';
+  /** Money, a home or a pension in another country */
+  abroad?: boolean;
+  foreignPensions?: ForeignPension[];
   age?: number; stopAge?: number; partnerAge?: number; partnerStopAge?: number;
   bank?: number;
   savings: Savings[];
@@ -35,11 +40,15 @@ export interface Answers {
   goal?: number;
 }
 
-const START: Answers = { who: 'me', savings: [], homes: [], family: [] };
+const START: Answers = { who: 'me', savings: [], homes: [], family: [], foreignPensions: [] };
+
+/** Rough US dollar value of 1 unit, used only until today's rates arrive. */
+const ROUGH_USD: Record<Currency, number> = { NZD: 0.58, AUD: 0.65, USD: 1, GBP: 1.33, PHP: 0.0175 };
+const CURRENCY_NAMES = Object.fromEntries(CURRENCIES.map((cu) => [cu, `${cu}, ${COUNTRIES[COUNTRY_CODES.find((k) => COUNTRIES[k].currency === cu)!].name}`])) as Record<Currency, string>;
 const n = (x: number | undefined) => (x !== undefined && Number.isFinite(x) ? x : 0);
 
 /** Turns the plain-language answers into a full household plan. */
-export function answersToPlan(a: Answers, country: CountryCode, retireIn: CountryCode | null): HouseholdInput {
+export function answersToPlan(a: Answers, country: CountryCode, retireIn: CountryCode | null, rates: Partial<Record<Currency, number>> = {}): HouseholdInput {
   const c = profile(country);
   const age = n(a.age) || 40;
   const stop = n(a.stopAge) || Math.max(age, c.pension.age);
@@ -47,7 +56,13 @@ export function answersToPlan(a: Answers, country: CountryCode, retireIn: Countr
   const pAge = n(a.partnerAge) || age;
   const pStop = n(a.partnerStopAge) || Math.max(pAge, c.pension.age);
   const homes = a.homes.filter((h) => n(h.worth) > 0);
-  return {
+  const home = c.currency as Currency;
+  const cur = (x?: Currency) => (a.abroad && x && x !== home ? x : undefined);
+  const savings = a.savings.filter((s) => n(s.amount) > 0 || n(s.monthly) > 0);
+  const homeName = (h: Home, i: number) => h.name || (i === 0 ? 'Home' : `Property ${i + 1}`);
+  const saveName = (s: Savings, i: number) => `${s.name || 'Savings'}${savings.filter((x) => (x.name || 'Savings') === (s.name || 'Savings')).length > 1 ? ` ${i + 1}` : ''}`;
+  const foreign = a.abroad ? (a.foreignPensions ?? []).filter((p) => n(p.monthly) > 0) : [];
+  const plan: HouseholdInput = {
     country,
     retireIn: retireIn && retireIn !== country ? retireIn : undefined,
     you: { currentAge: age, retirementAge: stop },
@@ -55,8 +70,9 @@ export function answersToPlan(a: Answers, country: CountryCode, retireIn: Countr
     endAge: Math.max(90, age + 5),
     inflationPct: c.inflationPct,
     cashOnHand: n(a.bank),
-    investments: a.savings.filter((s) => n(s.amount) > 0 || n(s.monthly) > 0).map((s) => ({
-      name: s.name || 'Savings',
+    investments: savings.map((s, i) => ({
+      name: saveName(s, i),
+      currency: cur(s.currency),
       kind: s.kind === 'retirement' ? (country === 'NZ' ? 'kiwisaver' : 'retirement_account') : s.kind === 'term' ? 'term_deposit' : s.kind === 'investments' ? 'shares' : 'other',
       balance: n(s.amount),
       returnPct: s.kind === 'term' ? 4 : STYLE_RETURN[s.style],
@@ -65,7 +81,8 @@ export function answersToPlan(a: Answers, country: CountryCode, retireIn: Countr
       contributionsStopAtRetirement: true,
     })),
     properties: homes.map((h, i) => ({
-      name: h.name || (i === 0 ? 'Home' : `Property ${i + 1}`),
+      name: homeName(h, i),
+      currency: cur(h.currency),
       value: n(h.worth), growthPct: 3, mortgageBalance: n(h.owe), mortgageRatePct: 5.5,
       monthlyRepayment: n(h.payment), monthlyNetRent: n(h.rent),
     })),
@@ -76,6 +93,11 @@ export function answersToPlan(a: Answers, country: CountryCode, retireIn: Countr
       ...(n(a.pension) > 0 ? [{ name: `Your ${c.pension.name}`, kind: 'pension' as const, owner: 'you' as const, monthlyAmount: n(a.pension) }] : []),
       ...(couple && n(a.partnerPension) > 0 ? [{ name: `Partner's ${c.pension.name}`, kind: 'pension' as const, owner: 'partner' as const, monthlyAmount: n(a.partnerPension) }] : []),
       ...(n(a.otherIncome) > 0 ? [{ name: 'Other money coming in', kind: 'other' as const, owner: 'you' as const, monthlyAmount: n(a.otherIncome) }] : []),
+      ...foreign.map((p) => ({
+        name: `${p.owner === 'partner' && couple ? "Partner's " : ''}${COUNTRIES[p.country].pension.name}`, kind: 'pension' as const,
+        owner: (p.owner === 'partner' && couple ? 'partner' : 'you') as 'you' | 'partner',
+        monthlyAmount: n(p.monthly), currency: cur(COUNTRIES[p.country].currency as Currency),
+      })),
     ],
     livingExpensesMonthly: n(a.spending),
     retirementLivingExpensesMonthly: a.spendingRetired !== undefined && Number.isFinite(a.spendingRetired) ? a.spendingRetired : undefined,
@@ -84,12 +106,20 @@ export function answersToPlan(a: Answers, country: CountryCode, retireIn: Countr
       monthlyCost: n(f.monthly), years: n(f.years) || 10, startInYears: 0,
     })),
     events: [
-      ...(n(a.sellHomeAge) > age && homes.length ? [{ name: `Sell ${homes[0].name || 'Home'}`, kind: 'sell_property' as const, atAge: n(a.sellHomeAge), propertyName: homes[0].name || 'Home' }] : []),
+      ...homes.flatMap((h, i) => (n(h.sellAge) > age ? [{ name: `Sell ${homeName(h, i)}`, kind: 'sell_property' as const, atAge: n(h.sellAge), propertyName: homeName(h, i) }] : [])),
+      ...savings.flatMap((s, i) => (n(s.cashOutAge) > age ? [{ name: `Cash out ${saveName(s, i)}`, kind: 'sell_investment' as const, atAge: n(s.cashOutAge), investmentName: saveName(s, i), sharePct: Math.min(100, Math.max(1, n(s.cashOutPct) || 100)) }] : [])),
       ...(n(a.gift) > 0 && n(a.giftAge) > age ? [{ name: 'Money you expect to receive', kind: 'money_in' as const, atAge: n(a.giftAge), amount: n(a.gift) }] : []),
       ...(n(a.bigSpend) > 0 && n(a.bigSpendAge) > age ? [{ name: 'Big purchase', kind: 'money_out' as const, atAge: n(a.bigSpendAge), amount: n(a.bigSpend) }] : []),
     ],
     goal: n(a.goal) > 0 ? { targetNetWorth: n(a.goal) } : undefined,
+    // Until pay or spending is entered, assume savings come from income we haven't been told about yet
+    contributionsFromOutsideIncome: a.pay === undefined && a.partnerPay === undefined && a.spending === undefined,
   };
+  // An exchange rate for every other currency used: today's rate if we have it, otherwise a rough one
+  plan.fx = usedCurrencies({ ...plan, investments: plan.investments ?? [], properties: plan.properties ?? [], otherAssets: [], debts: [], incomes: plan.incomes ?? [], dependants: [], otherExpenses: [], events: [] } as Parameters<typeof usedCurrencies>[0])
+    .filter((x) => x !== home)
+    .map((x) => ({ currency: x, rate: rates[x] ?? Number((ROUGH_USD[x] / ROUGH_USD[home]).toPrecision(4)), yearlyChangePct: 0 }));
+  return plan;
 }
 
 /** A labelled number field with a one-line explanation. Blank means "none". */
@@ -135,7 +165,23 @@ function Card({ title, onRemove, children }: { title: string; onRemove: () => vo
   );
 }
 
-export default function PlannerWizard() {
+function CurrencyPick({ id, label, value, home, onChange }: { id: string; label: string; value?: Currency; home: Currency; onChange: (v: Currency | undefined) => void }) {
+  return (
+    <div className="wizard-field">
+      <label htmlFor={id}>{label}</label>
+      <select id={id} className="planner-select wizard-select" value={value ?? home} onChange={(e) => onChange(e.target.value === home ? undefined : (e.target.value as Currency))}>
+        {CURRENCIES.map((cu) => <option key={cu} value={cu}>{CURRENCY_NAMES[cu]}</option>)}
+      </select>
+    </div>
+  );
+}
+
+/** Opens a plan in the "All details" view. */
+export function openInAllDetails(plan: HouseholdInput) {
+  window.location.assign(projectorLink(plan).replace('/calculator#', '/calculator?view=full#'));
+}
+
+export default function PlannerWizard({ onPlanChange }: { onPlanChange?: (plan: HouseholdInput | null) => void }) {
   const [country, setCountry] = useCountry();
   const [retireIn, setRetireIn] = useRetireIn();
   const [a, setA] = useState<Answers>(START);
@@ -145,6 +191,25 @@ export default function PlannerWizard() {
   const money = moneyFor(country);
   const cur = c.currency;
   const couple = a.who === 'couple';
+  const homeCur = cur as Currency;
+  const [rates, setRates] = useState<Partial<Record<Currency, number>>>({});
+  const livePlan = useMemo(() => answersToPlan(a, country, retireIn, rates), [a, country, retireIn, rates]);
+  const touched = a !== START;
+
+  // Share the plan so switching to "All details" keeps every answer
+  useEffect(() => { onPlanChange?.(touched ? livePlan : null); }, [livePlan, touched, onPlanChange]);
+
+  // Today's exchange rates for any other currencies in the plan
+  const foreignKey = (livePlan.fx ?? []).map((f) => f.currency).sort().join(',');
+  useEffect(() => {
+    if (!foreignKey) return;
+    let cancelled = false;
+    fetch(`/api/fx?home=${homeCur}&to=${foreignKey}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { perUnit?: Partial<Record<Currency, number>> } | null) => { if (!cancelled && d?.perUnit) setRates(d.perUnit); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [foreignKey, homeCur]);
 
   const ageOk = a.age !== undefined && a.age >= 16 && a.age <= 100 && (!couple || (a.partnerAge !== undefined && a.partnerAge >= 16 && a.partnerAge <= 100));
   const stopOk = (a.stopAge === undefined || (a.stopAge >= 16 && a.stopAge <= 100)) && (a.partnerStopAge === undefined || (a.partnerStopAge >= 16 && a.partnerStopAge <= 100));
@@ -156,13 +221,19 @@ export default function PlannerWizard() {
       body: (
         <>
           <p className="wizard-q">Who is this plan for?</p>
-          <Choice name="who" value={a.who} onChange={(v) => set({ who: v })}
+          <Choice name="who" value={a.who}
+            onChange={(v) => set(v === 'couple' ? { who: v, partnerStopAge: a.partnerStopAge ?? a.stopAge } : { who: v })}
             options={[['me', 'Just me', 'Your own money'], ['couple', 'Me and my partner', 'Money you share']]} />
+          {couple && <p className="wizard-help">Everything you&apos;ve already entered is kept. You&apos;ll just add your partner&apos;s details.</p>}
           <div className="wizard-pair">
             <CountrySelect id="wiz-country" value={country} onChange={setCountry} label="Where do you live?" />
             <RetireInSelect id="wiz-retire" value={retireIn && retireIn !== country ? retireIn : null} livesIn={country} onChange={setRetireIn} />
           </div>
           <p className="wizard-help">This sets your currency ({cur}) and the usual pension age ({c.pension.name} from {c.pension.age}).</p>
+          <p className="wizard-q">Do you have money, a home or a pension in another country?</p>
+          <Choice name="abroad" value={a.abroad ? 'yes' : 'no'} onChange={(v) => set({ abroad: v === 'yes' })}
+            options={[['no', 'No', 'Everything is here'], ['yes', 'Yes', 'Savings, property or a pension overseas']]} />
+          {a.abroad && <p className="wizard-help">Great, we&apos;ll ask which currency each one is in and use today&apos;s exchange rates.</p>}
         </>
       ),
     },
@@ -210,9 +281,14 @@ export default function PlannerWizard() {
               <Card key={i} title={s.name || 'Savings'} onRemove={() => set({ savings: a.savings.filter((_, j) => j !== i) })}>
                 <Choice name={`wiz-kind-${i}`} value={s.kind} onChange={(v) => upd({ kind: v, name: v === 'retirement' ? c.retirementAccount.name : v === 'investments' ? 'Shares or funds' : v === 'term' ? 'Term deposit' : 'Other savings' })}
                   options={[['retirement', c.retirementAccount.name, 'Retirement savings'], ['investments', 'Shares or funds'], ['term', 'Term deposit'], ['other', 'Something else']]} />
+                {a.abroad && <CurrencyPick id={`wiz-savc-${i}`} label="Which currency is it in?" value={s.currency} home={homeCur} onChange={(v) => upd({ currency: v })} />}
                 <div className="wizard-pair">
-                  <Field id={`wiz-sav-${i}`} label="How much is in it now?" value={s.amount} onChange={(v) => upd({ amount: v })} prefix={cur} />
-                  <Field id={`wiz-savm-${i}`} label="How much goes in each month?" help="Include anything your employer adds." value={s.monthly} onChange={(v) => upd({ monthly: v })} prefix={cur} />
+                  <Field id={`wiz-sav-${i}`} label="How much is in it now?" value={s.amount} onChange={(v) => upd({ amount: v })} prefix={a.abroad && s.currency ? s.currency : cur} />
+                  <Field id={`wiz-savm-${i}`} label="How much goes in each month?" help="Include anything your employer adds." value={s.monthly} onChange={(v) => upd({ monthly: v })} prefix={a.abroad && s.currency ? s.currency : cur} />
+                </div>
+                <div className="wizard-pair">
+                  <Field id={`wiz-savo-${i}`} label="Planning to cash it out? At what age?" help="Optional. The money moves into your savings. Leave blank to keep it." value={s.cashOutAge} onChange={(v) => upd({ cashOutAge: v })} suffix="years" />
+                  <Field id={`wiz-savp-${i}`} label="How much of it?" help="Blank means all of it." value={s.cashOutPct} onChange={(v) => upd({ cashOutPct: v === undefined ? undefined : Math.min(100, v) })} suffix="%" placeholder="100" />
                 </div>
                 {s.kind !== 'term' && (
                   <>
@@ -241,14 +317,16 @@ export default function PlannerWizard() {
             const upd = (p: Partial<Home>) => set({ homes: a.homes.map((x, j) => (j === i ? { ...x, ...p } : x)) });
             return (
               <Card key={i} title={h.name || (i === 0 ? 'Home' : `Property ${i + 1}`)} onRemove={() => set({ homes: a.homes.filter((_, j) => j !== i) })}>
+                {a.abroad && <CurrencyPick id={`wiz-hc-${i}`} label="Which country's money is it in?" value={h.currency} home={homeCur} onChange={(v) => upd({ currency: v })} />}
                 <div className="wizard-pair">
-                  <Field id={`wiz-hw-${i}`} label="What could it sell for today?" help="A rough guess is fine; a recent valuation is better." value={h.worth} onChange={(v) => upd({ worth: v })} prefix={cur} />
-                  <Field id={`wiz-ho-${i}`} label="How much do you still owe on it?" help="Your mortgage balance. 0 if it's paid off." value={h.owe} onChange={(v) => upd({ owe: v })} prefix={cur} />
+                  <Field id={`wiz-hw-${i}`} label="What could it sell for today?" help="A rough guess is fine; a recent valuation is better." value={h.worth} onChange={(v) => upd({ worth: v })} prefix={a.abroad && h.currency ? h.currency : cur} />
+                  <Field id={`wiz-ho-${i}`} label="How much do you still owe on it?" help="Your mortgage balance. 0 if it's paid off." value={h.owe} onChange={(v) => upd({ owe: v })} prefix={a.abroad && h.currency ? h.currency : cur} />
                 </div>
                 <div className="wizard-pair">
-                  <Field id={`wiz-hp-${i}`} label="Mortgage payment each month" value={h.payment} onChange={(v) => upd({ payment: v })} prefix={cur} />
-                  <Field id={`wiz-hr-${i}`} label="Rent you receive each month" help="Only if you rent it out. After costs like rates and repairs." value={h.rent} onChange={(v) => upd({ rent: v })} prefix={cur} />
+                  <Field id={`wiz-hp-${i}`} label="Mortgage payment each month" value={h.payment} onChange={(v) => upd({ payment: v })} prefix={a.abroad && h.currency ? h.currency : cur} />
+                  <Field id={`wiz-hr-${i}`} label="Rent you receive each month" help="Only if you rent it out. After costs like rates and repairs." value={h.rent} onChange={(v) => upd({ rent: v })} prefix={a.abroad && h.currency ? h.currency : cur} />
                 </div>
+                <Field id={`wiz-hs-${i}`} label="Planning to sell it? At what age?" help="Optional. The money (after the mortgage and selling costs) goes into your savings." value={h.sellAge} onChange={(v) => upd({ sellAge: v })} suffix="years" />
               </Card>
             );
           })}
@@ -273,7 +351,34 @@ export default function PlannerWizard() {
             {couple && <Field id="wiz-ppen" label={`Your partner's ${c.pension.name}, each month`} value={a.partnerPension} onChange={(v) => set({ partnerPension: v })} prefix={cur} />}
           </div>
           <Field id="wiz-oth" label="Any other money coming in each month?" help="For example dividends, a side business, or rent from somewhere not listed." value={a.otherIncome} onChange={(v) => set({ otherIncome: v })} prefix={cur} />
-          <p className="wizard-help">Pension from another country too? You can add it in &quot;See every detail&quot; at the end.</p>
+          {a.abroad ? (
+            <>
+              <p className="wizard-q">Pensions from other countries</p>
+              <p className="wizard-help">For example a UK State Pension or a Philippine SSS pension from years you worked there. Each starts at that country&apos;s pension age.</p>
+              {(a.foreignPensions ?? []).map((p, i) => {
+                const upd = (patch: Partial<ForeignPension>) => set({ foreignPensions: (a.foreignPensions ?? []).map((x, j) => (j === i ? { ...x, ...patch } : x)) });
+                return (
+                  <Card key={i} title={COUNTRIES[p.country].pension.name} onRemove={() => set({ foreignPensions: (a.foreignPensions ?? []).filter((_, j) => j !== i) })}>
+                    <div className="wizard-pair">
+                      <div className="wizard-field">
+                        <label htmlFor={`wiz-fpc-${i}`}>Which country pays it?</label>
+                        <select id={`wiz-fpc-${i}`} className="planner-select wizard-select" value={p.country} onChange={(e) => upd({ country: e.target.value as CountryCode })}>
+                          {COUNTRY_CODES.map((k) => <option key={k} value={k}>{COUNTRIES[k].name}</option>)}
+                        </select>
+                      </div>
+                      <Field id={`wiz-fpm-${i}`} label="About how much each month?" help={`In ${COUNTRIES[p.country].currency}. Starts at ${COUNTRIES[p.country].pension.age}.`} value={p.monthly} onChange={(v) => upd({ monthly: v })} prefix={COUNTRIES[p.country].currency} />
+                    </div>
+                    {couple && <Choice name={`wiz-fpo-${i}`} value={p.owner} onChange={(v) => upd({ owner: v })} options={[['you', 'Mine'], ['partner', "My partner's"]]} />}
+                  </Card>
+                );
+              })}
+              <button type="button" className="wizard-add" onClick={() => set({ foreignPensions: [...(a.foreignPensions ?? []), { country: COUNTRY_CODES.find((k) => k !== country)!, owner: 'you' }] })}>
+                + Add a pension from another country
+              </button>
+            </>
+          ) : (
+            <p className="wizard-help">Pension from another country too? Choose &quot;Yes&quot; to the overseas question on the first step.</p>
+          )}
         </>
       ),
     },
@@ -307,13 +412,11 @@ export default function PlannerWizard() {
     },
     {
       icon: '✨', title: 'Big moments ahead',
-      why: 'Optional. Things you already know are coming, like selling a house or receiving an inheritance.',
+      why: 'Optional. Things you already know are coming, like an inheritance or a big expense.',
       optional: true,
       body: (
         <>
-          {a.homes.length > 0 && (
-            <Field id="wiz-sell" label={`Planning to sell your ${a.homes[0].name || 'home'}? At what age?`} help="The money (after the mortgage and selling costs) goes into your savings. Leave blank if not." value={a.sellHomeAge} onChange={(v) => set({ sellHomeAge: v })} suffix="years" />
-          )}
+          <p className="wizard-help">Selling a property or cashing out an investment? Add the age on its card in the earlier steps.</p>
           <div className="wizard-pair">
             <Field id="wiz-gift" label="Money you expect to receive" help="For example an inheritance." value={a.gift} onChange={(v) => set({ gift: v })} prefix={cur} />
             <Field id="wiz-gifta" label="At about what age?" value={a.giftAge} onChange={(v) => set({ giftAge: v })} suffix="years" />
@@ -336,7 +439,7 @@ export default function PlannerWizard() {
   ];
 
   const last = steps.length; // the results screen
-  const plan = useMemo(() => (step === last ? answersToPlan(a, country, retireIn) : null), [step, last, a, country, retireIn]);
+  const plan = step === last ? livePlan : null;
   const result = useMemo(() => {
     if (!plan) return null;
     try {
@@ -393,8 +496,9 @@ export default function PlannerWizard() {
         <div className="wizard-nav">
           <button type="button" className="wizard-button is-quiet" onClick={() => go(0)}>← Change my answers</button>
           <button type="button" className="start-again" onClick={() => { if (window.confirm('Clear all your answers and start again?')) { setA(START); go(0); } }}>🧹 Start again</button>
-          {plan && <a className="wizard-button" href={projectorLink(plan).replace('/calculator#', '/calculator?view=full#')}>See every detail and fine-tune</a>}
+          {plan && <button type="button" className="wizard-button" onClick={() => openInAllDetails(plan)}>See every detail and fine-tune</button>}
         </div>
+        <PlanFileActions plan={plan} onOpen={openInAllDetails} />
         <p className="wizard-privacy">🔒 Worked out on this device. Nothing was sent to us. <ClearDeviceData label="Clear my answers from this device" onCleared={() => { setA(START); go(0); }} /></p>
         <p className="disclaimer-note">These are illustrations based on your answers, not predictions or financial advice.</p>
       </section>
@@ -404,6 +508,7 @@ export default function PlannerWizard() {
   const s = steps[step];
   const pct = Math.round((step / last) * 100);
   return (
+    <div className="wizard-layout">
     <section id="wizard-top" className="wizard" aria-labelledby="wiz-title">
       <div className="wizard-progress" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Progress"><span style={{ width: `${Math.max(4, pct)}%` }} /></div>
       <div className="wizard-count-row">
@@ -429,5 +534,53 @@ export default function PlannerWizard() {
       </div>
       <p className="wizard-privacy">🔒 Your answers stay on this device. <ClearDeviceData label="Clear my answers" onCleared={() => { setA(START); go(0); }} /></p>
     </section>
+    <PlanPreview answers={a} plan={ageOk ? livePlan : null} money={money} onFinish={() => go(last)} cashflowKnown={a.pay !== undefined || a.partnerPay !== undefined || a.spending !== undefined} />
+    </div>
+  );
+}
+
+/** Live "Your plan so far" panel beside the steps on wider screens. */
+function PlanPreview({ answers, plan, money, onFinish, cashflowKnown }: { answers: Answers; plan: HouseholdInput | null; money: (n: number) => string; onFinish: () => void; cashflowKnown: boolean }) {
+  const r = useMemo(() => {
+    if (!plan) return null;
+    try { return projectHousehold(plan, { monteCarlo: false }); } catch { return null; }
+  }, [plan]);
+  const atRet = r?.milestones.find((m) => m.age === r.retirementAge);
+  const filled = [answers.bank, answers.pay, answers.spending].filter((x) => x !== undefined).length + answers.savings.length + answers.homes.length;
+  return (
+    <aside className="wizard-preview no-print" aria-label="Your plan so far">
+      <p className="wizard-preview-title">✨ Your plan so far</p>
+      {!r || !atRet ? (
+        <div className="wizard-preview-empty">
+          <p>Your picture builds here as you answer.</p>
+          <ol>
+            <li>Tell us who the plan is for</li>
+            <li>Add your age</li>
+            <li>Add what you have, earn and spend</li>
+          </ol>
+        </div>
+      ) : (
+        <>
+          <div className="wizard-preview-stats">
+            <div><span>You own today</span><strong>{money(r.today.netWorth)}</strong></div>
+            <div><span>By age {r.retirementAge}</span><strong>{money(atRet.expected)}</strong></div>
+            {cashflowKnown ? (
+              <>
+                <div className={r.scenarios[1].shortfallAge === null ? 'is-good' : 'is-watch'}>
+                  <span>Savings last</span>
+                  <strong>{r.scenarios[1].shortfallAge === null ? `Past ${r.inputs.endAge}` : `To about ${r.scenarios[1].shortfallAge}`}</strong>
+                </div>
+                <div><span>Left over each month</span><strong>{money(r.today.monthlySurplus)}</strong></div>
+              </>
+            ) : (
+              <div className="wizard-preview-wait"><span>How long savings last</span><p>Shows once you add what comes in and goes out (step 6 and 7).</p></div>
+            )}
+          </div>
+          <HouseholdChart result={r} height={190} />
+          <p className="wizard-help">{filled < 3 ? 'Keep going: the more you add, the clearer this gets.' : 'Looking good. Finish the steps for the full results and ideas to improve your plan.'}</p>
+          <button type="button" className="wizard-button is-quiet" onClick={onFinish}>Jump to my results</button>
+        </>
+      )}
+    </aside>
   );
 }
