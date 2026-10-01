@@ -29,6 +29,7 @@
  *   npm run seed -- --dry-run         chunk statistics only (no API calls)
  */
 import { config as loadEnv } from 'dotenv';
+import { decodeEntities, htmlToText, stripTags } from './htmlText';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -114,31 +115,10 @@ function buildChunks(sections: Section[], meta: Meta): Chunk[] {
   return chunks.map((c, i) => ({ ...c, chunk: i + 1 }));
 }
 
-function htmlToText(html: string): string {
-  return html
-    .replace(/<(script|style|head)[\s\S]*?<\/\1>/gi, '')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/(p|div|h[1-6]|li|tr|section|article|blockquote)>/gi, '\n\n')
-    .replace(/<li[^>]*>/gi, '- ')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;|&rsquo;|&lsquo;/g, "'")
-    .replace(/&ldquo;|&rdquo;/g, '"')
-    .replace(/&mdash;/g, '—')
-    .replace(/&ndash;/g, '–')
-    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
-    .replace(/[ \t]+/g, ' ')
-    .replace(/\n\s*\n\s*\n+/g, '\n\n')
-    .trim();
-}
-
-const firstHeading = (html: string) =>
-  html.match(/<h[1-3][^>]*>([\s\S]*?)<\/h[1-3]>/i)?.[1].replace(/<[^>]+>/g, '').trim() ||
-  html.match(/<title>([\s\S]*?)<\/title>/i)?.[1].trim();
+const firstHeading = (html: string) => {
+  const heading = html.match(/<h[1-3][^>]*>([\s\S]*?)<\/h[1-3]>/i)?.[1] ?? html.match(/<title>([\s\S]*?)<\/title>/i)?.[1];
+  return heading ? decodeEntities(stripTags(heading)).trim() || undefined : undefined;
+};
 
 // ---------------------------------------------------------------------------
 // Readers, one per format
