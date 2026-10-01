@@ -1,15 +1,9 @@
 import Link from 'next/link';
 import AccountControls from './AccountControls';
+import SiteNav, { type NavKey } from './SiteNav';
 
-/** Header for the secondary pages (calculator, plans, about). */
-export default function SiteHeader({ current }: { current: 'calculator' | 'pricing' | 'about' | 'methodology' | 'sources' }) {
-  const links = [
-    { href: '/', label: 'Ask the library', key: 'ask' },
-    { href: '/calculator', label: 'Wealth projector', key: 'calculator' },
-    { href: '/methodology', label: 'Methodology', key: 'methodology' },
-    { href: '/sources', label: 'Sources', key: 'sources' },
-    { href: '/about', label: 'About & privacy', key: 'about' },
-  ];
+/** Header for the secondary pages (calculator, plans, about). The chat page shows the same menu in its top bar. */
+export default function SiteHeader({ current }: { current: Exclude<NavKey, 'ask'> }) {
   return (
     <header className="site-header">
       <Link className="brand-lockup" href="/">
@@ -19,13 +13,7 @@ export default function SiteHeader({ current }: { current: 'calculator' | 'prici
           <small>NZ, Australia, US, UK and Philippines</small>
         </span>
       </Link>
-      <nav className="site-nav" aria-label="Main">
-        {links.map((l) => (
-          <Link key={l.key} href={l.href} aria-current={l.key === current ? 'page' : undefined}>
-            {l.label}
-          </Link>
-        ))}
-      </nav>
+      <SiteNav current={current} />
       <AccountControls />
     </header>
   );

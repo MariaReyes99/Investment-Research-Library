@@ -42,6 +42,24 @@ export interface Answers {
 
 const START: Answers = { who: 'me', savings: [], homes: [], family: [], foreignPensions: [] };
 
+/** Answers are kept in this browser until "Start again" or "Clear my data", so leaving the page doesn't lose them. */
+const GUIDED_KEY = 'irl:guided';
+function loadGuided(): { a: Answers; step: number } | null {
+  try {
+    const raw = JSON.parse(window.localStorage.getItem(GUIDED_KEY) ?? 'null');
+    if (!raw || typeof raw !== 'object' || !raw.a || typeof raw.a.who !== 'string') return null;
+    return { a: { ...START, ...raw.a }, step: Number.isInteger(raw.step) ? raw.step : 0 };
+  } catch {
+    return null;
+  }
+}
+function saveGuided(a: Answers, step: number) {
+  try {
+    if (a === START && step === 0) window.localStorage.removeItem(GUIDED_KEY);
+    else window.localStorage.setItem(GUIDED_KEY, JSON.stringify({ a, step }));
+  } catch { /* private browsing: answers last for this visit only */ }
+}
+
 /** Rough US dollar value of 1 unit, used only until today's rates arrive. */
 const ROUGH_USD: Record<Currency, number> = { NZD: 0.58, AUD: 0.65, USD: 1, GBP: 1.33, PHP: 0.0175 };
 const CURRENCY_NAMES = Object.fromEntries(CURRENCIES.map((cu) => [cu, `${cu}, ${COUNTRIES[COUNTRY_CODES.find((k) => COUNTRIES[k].currency === cu)!].name}`])) as Record<Currency, string>;
@@ -186,6 +204,20 @@ export default function PlannerWizard({ onPlanChange }: { onPlanChange?: (plan: 
   const [retireIn, setRetireIn] = useRetireIn();
   const [a, setA] = useState<Answers>(START);
   const [step, setStep] = useState(0);
+  const [restored, setRestored] = useState(false);
+  // Bring back earlier answers when someone returns to the page
+  useEffect(() => {
+    const saved = loadGuided();
+    if (saved) { setA(saved.a); setStep(saved.step); }
+    setRestored(true);
+  }, []);
+  useEffect(() => { if (restored) saveGuided(a, step); }, [a, step, restored]);
+  // Answers cleared from another page or tab
+  useEffect(() => {
+    const cleared = () => { setA(START); setStep(0); };
+    window.addEventListener('irl:saved-plans-cleared', cleared);
+    return () => window.removeEventListener('irl:saved-plans-cleared', cleared);
+  }, []);
   const set = (patch: Partial<Answers>) => setA((p) => ({ ...p, ...patch }));
   const c = COUNTRIES[country];
   const money = moneyFor(country);
@@ -532,7 +564,7 @@ export default function PlannerWizard({ onPlanChange }: { onPlanChange?: (plan: 
           </button>
         </div>
       </div>
-      <p className="wizard-privacy">🔒 Your answers stay on this device. <ClearDeviceData label="Clear my answers" onCleared={() => { setA(START); go(0); }} /></p>
+      <p className="wizard-privacy">🔒 Your answers stay on this device, kept until you press Start again or Clear. <ClearDeviceData label="Clear my answers" onCleared={() => { setA(START); go(0); }} /></p>
     </section>
     <PlanPreview answers={a} plan={ageOk ? livePlan : null} money={money} onFinish={() => go(last)} cashflowKnown={a.pay !== undefined || a.partnerPay !== undefined || a.spending !== undefined} />
     </div>

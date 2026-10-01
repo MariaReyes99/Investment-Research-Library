@@ -18,6 +18,9 @@ import { usePlan } from './usePlan';
 import { canSavePlans } from '../lib/plans';
 
 type Draft = Omit<Household, 'compare'> & { compare: NonNullable<Household['compare']> };
+
+/** The plan in progress, kept in this browser until "Start again" or "Clear my data". */
+const FULL_PLAN_KEY = 'irl:full-plan';
 type ListKey = 'investments' | 'properties' | 'otherAssets' | 'debts' | 'incomes' | 'dependants' | 'otherExpenses' | 'events' | 'compare';
 type Item<K extends ListKey> = Draft[K][number];
 type Owner = 'you' | 'partner' | 'joint';
@@ -319,17 +322,29 @@ export default function HouseholdPlanner() {
   const [loadedFromChat, setLoadedFromChat] = useState(false);
   const touched = useRef(false);
 
-  // A plan sent from a chat answer arrives in the URL fragment, which never reaches the server.
+  // A plan from a chat answer or the guided setup arrives in the URL fragment, which never reaches the server.
+  // Otherwise, bring back the plan this person was working on, kept on this device until they clear it.
+  const [restored, setRestored] = useState(false);
   useEffect(() => {
-    const fromChat = planFromHash(window.location.hash);
-    const draft = fromChat && toDraft(fromChat);
+    const fromLink = planFromHash(window.location.hash);
+    const draft = fromLink && toDraft(fromLink);
     if (draft) {
       setPlan(draft);
       setLoadedFromChat(true);
       touched.current = true;
-      window.history.replaceState(null, '', window.location.pathname);
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    } else {
+      try {
+        const saved = toDraft(JSON.parse(window.localStorage.getItem(FULL_PLAN_KEY) ?? 'null'));
+        if (saved) { setPlan(saved); touched.current = true; }
+      } catch { /* nothing saved */ }
     }
+    setRestored(true);
   }, []);
+  useEffect(() => {
+    if (!restored || !touched.current) return;
+    try { window.localStorage.setItem(FULL_PLAN_KEY, JSON.stringify(plan)); } catch { /* private browsing */ }
+  }, [plan, restored]);
 
   // Follow the saved country of residence until the person starts editing.
   useEffect(() => {
@@ -443,6 +458,7 @@ export default function HouseholdPlanner() {
   /** Empties every field on the screen and starts a fresh plan. */
   const startAgain = (ask = true) => {
     if (ask && !window.confirm('Clear everything on this screen and start again?')) return;
+    try { window.localStorage.removeItem(FULL_PLAN_KEY); } catch { /* ignore */ }
     touched.current = false;
     lastGood.current = null;
     setLoadedFromChat(false);
@@ -795,7 +811,7 @@ export default function HouseholdPlanner() {
         </details>
 
         <p className="calc-privacy">
-          Calculated on your device. Nothing you enter here is sent to us. <ClearDeviceData onCleared={() => startAgain(false)} />
+          Calculated on your device. Nothing you enter here is sent to us; it&apos;s kept in this browser until you press Start again or Clear. <ClearDeviceData onCleared={() => startAgain(false)} />
         </p>
       </form>
 

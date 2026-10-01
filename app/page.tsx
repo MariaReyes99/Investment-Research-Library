@@ -1,6 +1,7 @@
 'use client';
 
 import { memo, useEffect, useMemo, useState } from 'react';
+import SiteNav from '../components/SiteNav';
 import Link from 'next/link';
 import { useChat } from '@ai-sdk/react';
 import ReactMarkdown from 'react-markdown';
@@ -227,7 +228,7 @@ export default function Page() {
 
       <section className="guide-workspace" id="top">
         <header className="workspace-bar">
-          <div className="breadcrumb"><span>RESEARCH DESK</span><b>/</b> INVESTMENT LIBRARY <b>/</b> {COUNTRIES[country].name.toUpperCase()} ({COUNTRIES[country].currency})</div>
+          <SiteNav current="ask" />
           <div className="source-count">
             <span className="ready-dot" /> <span className="usage-meter">{usageLabel}</span>
           </div>

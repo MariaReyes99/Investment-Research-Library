@@ -845,3 +845,14 @@ img, svg, canvas, video { max-width: 100%; }
 }
 /* Keep long lines of answer text comfortable to read; charts and tables use the full width */
 .markdown-body > p, .markdown-body > ul, .markdown-body > ol, .markdown-body > blockquote { max-width: 82ch; }
+
+/* Same main menu on the chat page, in its top bar */
+.workspace-bar .site-nav { margin-left: 0; flex-wrap: wrap; row-gap: 6px; }
+.workspace-bar .site-nav a { font-size: 13px; }
+@media (min-width: 1280px) { .workspace-bar .site-nav a { font-size: 14px; } }
+@media (max-width: 760px) {
+	.workspace-bar { flex-wrap: wrap; row-gap: 4px; padding-top: 8px; padding-bottom: 8px; }
+	.workspace-bar .site-nav { width: 100%; flex-wrap: nowrap; overflow-x: auto; }
+	.workspace-bar .source-count { width: 100%; }
+}
+@media (max-width: 760px) { .workspace-bar .site-nav { order: -1; } }

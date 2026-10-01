@@ -5,7 +5,7 @@
  */
 import { useState } from 'react';
 
-const KEYS = ['irl:saved-plans', 'irl:country', 'irl:retire-in'];
+const KEYS = ['irl:saved-plans', 'irl:country', 'irl:retire-in', 'irl:guided', 'irl:full-plan'];
 
 export function clearDeviceData(): boolean {
   try {
