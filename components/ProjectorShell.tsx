@@ -1,8 +1,8 @@
 'use client';
 /**
  * The wealth projector page: a guided, step-by-step setup by default, and an
- * "All details" view with every option. Whatever was entered in the guided
- * setup is carried into "All details", whichever way the person switches.
+ * "Advanced" view with every option. Whatever was entered in the guided
+ * setup is carried into "Advanced", whichever way the person switches.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import PlannerWizard from './PlannerWizard';
@@ -26,7 +26,7 @@ export default function ProjectorShell() {
   const choose = (v: View) => {
     if (v === view) return;
     if (v === 'full' && guidedPlan.current) {
-      // Hand the guided answers to "All details" (it reads them from the address, on this device only)
+      // Hand the guided answers to "Advanced" (it reads them from the address, on this device only)
       const hash = projectorLink(guidedPlan.current).split('#')[1];
       window.history.replaceState(null, '', `/calculator?view=full#${hash}`);
     } else {
@@ -42,7 +42,7 @@ export default function ProjectorShell() {
           <span aria-hidden="true">🧭</span> Guided setup <small>Step by step, about 5 minutes</small>
         </button>
         <button type="button" role="tab" aria-selected={view === 'full'} className={view === 'full' ? 'is-on' : ''} onClick={() => choose('full')}>
-          <span aria-hidden="true">🛠️</span> All details <small>Every option on one page</small>
+          <span aria-hidden="true">🛠️</span> Advanced <small>Every option on one page, for more control</small>
         </button>
       </div>
       {view === 'guided' ? <PlannerWizard onPlanChange={rememberGuided} /> : <HouseholdPlanner />}

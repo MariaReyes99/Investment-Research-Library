@@ -26,7 +26,20 @@ export interface Lever {
   runsOutAge: number | null;
 }
 
+export interface MixSlice { label: string; value: number; share: number }
+
+/** What the household owns, broken down three ways (today's money, home currency). */
+export interface PortfolioMix {
+  byAsset: MixSlice[];
+  byInvestmentType: MixSlice[];
+  byCurrency: MixSlice[];
+  /** Estimated from each investment's type and expected growth. */
+  growthDefensive: MixSlice[];
+  feesPerYear: number;
+}
+
 export interface HouseholdAnalysis {
+  mix: PortfolioMix;
   metrics: {
     propertyShare: number;
     liquidShare: number;
@@ -249,6 +262,64 @@ export function analyseHousehold(r: HouseholdResult): HouseholdAnalysis {
     });
   }
 
+  // ---- Portfolio mix (a simple look at what is owned, from the figures entered)
+  const slices = (pairs: [string, number][]): MixSlice[] => {
+    const total = sum(pairs.map(([, v]) => v)) || 1;
+    return pairs.filter(([, v]) => v > 0.5).map(([label, value]) => ({ label, value, share: value / total })).sort((a, b) => b.value - a.value);
+  };
+  const invValues = h.investments.map((i) => ({ i, v: inHome(i.balance, i.currency) }));
+  const typeLabel: Record<string, string> = {
+    kiwisaver: 'KiwiSaver / Superannuation', retirement_account: 'Retirement savings', index_fund: 'Index funds / ETFs',
+    managed_fund: 'Managed funds', shares: 'Individual shares', term_deposit: 'Term deposits', bonds: 'Bonds', other: 'Other investments',
+  };
+  const byType = new Map<string, number>();
+  invValues.forEach(({ i, v }) => byType.set(typeLabel[i.kind] ?? 'Other investments', (byType.get(typeLabel[i.kind] ?? 'Other investments') ?? 0) + v));
+  const byCur = new Map<string, number>();
+  const addCur = (cur: string | undefined, v: number) => byCur.set(cur && cur !== home ? cur : home, (byCur.get(cur && cur !== home ? cur : home) ?? 0) + v);
+  addCur(home, h.cashOnHand);
+  invValues.forEach(({ i, v }) => addCur(i.currency, v));
+  h.properties.forEach((p) => addCur(p.currency, inHome(p.value, p.currency)));
+  h.otherAssets.forEach((a) => addCur(a.currency, inHome(a.value, a.currency)));
+  // Growth or defensive, estimated: shares and index funds are growth; term deposits, bonds and cash are defensive;
+  // mixed funds are judged by their expected growth
+  let growth = 0, defensive = h.cashOnHand, mixed = 0;
+  invValues.forEach(({ i, v }) => {
+    if (i.kind === 'shares' || i.kind === 'index_fund') growth += v;
+    else if (i.kind === 'term_deposit' || i.kind === 'bonds') defensive += v;
+    else if (i.returnPct >= 6.5) growth += v;
+    else if (i.returnPct <= 4.5) defensive += v;
+    else mixed += v;
+  });
+  const mix: PortfolioMix = {
+    byAsset: slices([
+      ['Cash', h.cashOnHand],
+      ['Investments', sum(invValues.map((x) => x.v))],
+      ['Property', sum(h.properties.map((p) => inHome(p.value, p.currency)))],
+      ['Other things you own', sum(h.otherAssets.map((a) => inHome(a.value, a.currency)))],
+    ]),
+    byInvestmentType: slices([...byType.entries()]),
+    byCurrency: slices([...byCur.entries()]),
+    growthDefensive: slices([['Growth (mostly shares)', growth], ['Mixed', mixed], ['Defensive (cash, bonds, deposits)', defensive]]),
+    feesPerYear: sum(invValues.map(({ i, v }) => v * i.feesPct / 100)),
+  };
+  const invTotalHome = sum(invValues.map((x) => x.v));
+  if (invTotalHome > 0) {
+    const biggest = invValues.reduce((a, b) => (b.v > a.v ? b : a));
+    if (invValues.length > 1 && biggest.v / invTotalHome >= 0.6) {
+      risks.push({ title: `Most of your investments are in ${biggest.i.name}`, detail: `${pct(biggest.v / invTotalHome)} of your investments are in one place. Spreading across funds, providers or asset types reduces the impact if one does badly.` });
+    }
+    const homeShare = (byCur.get(home) ?? 0) / (sum([...byCur.values()]) || 1);
+    if (homeShare > 0.95 && h.investments.every((i) => !i.currency || i.currency === home)) {
+      risks.push({ title: `Almost everything is in ${home}`, detail: `Nearly all you own is in one currency and, for property, one country. Many investors hold some overseas shares or funds so that not everything depends on one economy.` });
+    }
+    const avgFee = (mix.feesPerYear / invTotalHome) * 100;
+    if (mix.feesPerYear > 0 && avgFee < 0.4) {
+      strengths.push({ title: 'Low investment fees', detail: `About ${nzd(mix.feesPerYear)} a year at today's balances (${avgFee.toFixed(2)}% on average), which leaves more of the growth for you.` });
+    } else if (avgFee > 0.9) {
+      weaknesses.push({ title: 'Investment fees are on the high side', detail: `About ${nzd(mix.feesPerYear)} a year at today's balances (${avgFee.toFixed(2)}% on average). Fees come out every year whatever markets do; compare similar funds with lower fees using the platform comparison.` });
+    }
+  }
+
   // Levers: each re-runs the whole projection with one change
   const levers: Lever[] = [];
   const tryLever = (title: string, change: string, tradeOff: string, next: Household) => {
@@ -334,7 +405,7 @@ export function analyseHousehold(r: HouseholdResult): HouseholdAnalysis {
       debtRatio, cashMonths, weightedReturnPct, weightedFeesPct, feeCostAtRetirement,
       retirementGapYearly, retirementWithdrawalPct, extraInterestPerPointMonthly, salaries,
     },
-    strengths, weaknesses, risks, levers, baseline,
+    strengths, weaknesses, risks, levers, baseline, mix,
   };
 }
 

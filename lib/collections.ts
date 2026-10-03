@@ -14,6 +14,7 @@ export const COLLECTIONS = [
   { id: 'KiwiSaver_Guides', label: 'KiwiSaver', description: 'KiwiSaver fund types, contribution rates and government contributions' },
   { id: 'Australia_Guides', label: 'Australia', description: 'Australian superannuation, ETF and investment-platform information' },
   { id: 'FIF_Tax_Guides', label: 'FIF tax', description: 'NZ foreign investment fund (FIF) tax rules, de minimis threshold, FDR and CV methods' },
+  { id: 'Retirement_Guides', label: 'Retirement', description: 'Spending savings in retirement: drawdown rules of thumb (6%, inflated 4%, fixed date, life expectancy) and NZ Super' },
 ] as const;
 
 export type CollectionId = (typeof COLLECTIONS)[number]['id'];

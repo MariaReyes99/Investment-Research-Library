@@ -17,6 +17,7 @@ export type PiiType =
   | "card_expiry"
   | "bank_account"
   | "ird_number"
+  | "tax_number"
   | "email"
   | "phone"
   | "date_of_birth"
@@ -94,6 +95,13 @@ const RULES: Rule[] = [
   // IRD: keyword-labelled, or a dashed 8-9 digit number that passes the checksum
   { type: "ird_number", re: /\b(?:ird|tax file|tfn|tax number)\s*(?:no\.?|number|#)?\s*[:#]?\s*\d{2,3}[- ]?\d{3}[- ]?\d{3}\b/gi },
   { type: "ird_number", re: /\b\d{2,3}-\d{3}-\d{3}\b/g, test: irdValid },
+  // US Social Security number: labelled, or in the usual 3-2-4 format (skipping numbers that are never issued)
+  { type: "tax_number", re: /\b(?:ssn|social security (?:no\.?|number))\s*[:#]?\s*\d{3}[- ]?\d{2}[- ]?\d{4}\b/gi },
+  { type: "tax_number", re: /\b(?!000|666|9\d\d)\d{3}-(?!00)\d{2}-(?!0000)\d{4}\b/g },
+  // UK National Insurance number, e.g. QQ 12 34 56 C
+  { type: "tax_number", re: /\b(?!BG|GB|KN|NK|NT|TN|ZZ)[A-CEGHJ-PR-TW-Z][A-CEGHJ-NPR-TW-Z] ?\d{2} ?\d{2} ?\d{2} ?[A-D]\b/gi },
+  // Philippine TIN: labelled, 9 to 12 digits in groups of three
+  { type: "tax_number", re: /\b(?:tin|tax identification (?:no\.?|number))\s*[:#]?\s*\d{3}[- ]?\d{3}[- ]?\d{3}(?:[- ]?\d{3,5})?\b/gi },
   { type: "email", re: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g },
   // NZ/AU/international phone numbers
   { type: "phone", re: /(?:\+\d{1,3}[ -]?)?\(?0?\d{1,2}\)?[ -]?\d{3,4}[ -]?\d{3,4}\b/g,

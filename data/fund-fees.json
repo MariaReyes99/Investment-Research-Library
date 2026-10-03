@@ -1,0 +1,6 @@
+{
+  "about": "Fees for real funds, used by the platform comparison's 'Fill in from a fund' picker. Copy each figure from the fund's latest quarterly fund update on the Disclose Register (https://disclose-register.companiesoffice.govt.nz), then set asOf. Reviewed every 3 months by npm run check:sources. See docs/fund-fees-howto.md.",
+  "asOf": "",
+  "reviewEveryMonths": 3,
+  "funds": []
+}

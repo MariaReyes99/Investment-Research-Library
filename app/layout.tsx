@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { ClerkProvider } from '@clerk/nextjs';
 import './globals.css';
+import IntroAvatar from '../components/IntroAvatar';
 
 export const metadata: Metadata = {
   title: 'Investment Research Library',
@@ -13,7 +14,10 @@ const clerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const page = (
     <html lang="en-NZ">
-      <body>{children}</body>
+      <body>
+        {children}
+        <IntroAvatar />
+      </body>
     </html>
   );
   return clerkEnabled ? <ClerkProvider>{page}</ClerkProvider> : page;

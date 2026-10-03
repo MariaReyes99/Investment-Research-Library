@@ -112,6 +112,7 @@ export default function ProjectorGuidePage() {
               <tr><th scope="row">You change jobs or get a pay rise</th><td>—</td><td>Take-home pay and monthly contributions</td></tr>
               <tr><th scope="row">You pay off the mortgage</th><td>Nothing: repayments stop automatically once the balance reaches 0</td><td>Update the mortgage owing each year so it stays accurate</td></tr>
               <tr><th scope="row">You plan to sell or downsize</th><td>A sell event at the age you&apos;ll sell; &quot;Buy instead&quot; if you&apos;ll buy a cheaper home</td><td>If you&apos;ll rent afterwards, add rent under Other expenses starting that year</td></tr>
+              <tr><th scope="row">You want to stay in your home but need more money in retirement</th><td>A reverse mortgage on the home: the age it starts, a lump sum and/or a monthly payment, and the interest rate</td><td>Check the warnings: interest compounds, so the loan grows each year</td></tr>
               <tr><th scope="row">You get an inheritance or lump sum</th><td>A money-in event at that age</td><td>After it arrives, remove the event and add the money to cash or investments</td></tr>
               <tr><th scope="row">You retire</th><td>Your pension or pensions, if not already added</td><td>Living costs in retirement; salary stops automatically at the retirement age you set</td></tr>
               <tr><th scope="row">You start receiving a pension</th><td>—</td><td>Replace the estimate with the actual amount</td></tr>

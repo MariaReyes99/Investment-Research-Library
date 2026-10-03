@@ -8,12 +8,14 @@ import type { ZodIssue } from 'zod';
 import { CURRENCIES, HouseholdInputSchema, countryOfCurrency, projectHousehold, retirementCurrency, TAX_TREATMENTS, usedCurrencies, type Currency, type Household, type HouseholdResult } from '../lib/finance/household';
 import { planFromHash } from '../lib/finance/householdLink';
 import { analyseHousehold } from '../lib/finance/householdAnalysis';
-import { COUNTRIES, COUNTRY_CODES, moneyFor, profile, retirementSavingsLabel, type CountryCode } from '../lib/countries';
+import { COUNTRIES, COUNTRY_CODES, localTerms, moneyFor, profile, retirementSavingsLabel, type CountryCode } from '../lib/countries';
+import { HINTS, feesHint, growthHint, inflationHint, taxRateHint } from '../lib/fieldGuide';
 import { HouseholdAnalysisView, HouseholdChart, HouseholdComparison, HouseholdHeadline, HouseholdMilestones, HouseholdWarnings } from './HouseholdCharts';
 import { BasisLabel, CountrySelect, RetireInSelect, useCountry, useRetireIn } from './CountryPicker';
 import SavedPlans from './SavedPlans';
 import PlanFileActions from './PlanFileActions';
 import ClearDeviceData from './ClearDeviceData';
+import BufferCheck from './BufferCheck';
 import { usePlan } from './usePlan';
 import { canSavePlans } from '../lib/plans';
 
@@ -61,8 +63,8 @@ function defaultPlan(country: CountryCode): Draft {
 const investmentKinds = (country: CountryCode) => ({
   ...(country === 'NZ' ? { kiwisaver: 'KiwiSaver / Superannuation' } : {}),
   retirement_account: country === 'NZ' ? 'Other retirement fund' : retirementSavingsLabel(country),
-  index_fund: 'Index fund / ETF', managed_fund: 'Managed fund', shares: 'Individual shares',
-  term_deposit: 'Term deposit', bonds: 'Bonds', other: 'Other',
+  index_fund: 'Index fund / ETF', managed_fund: 'Managed fund', shares: `Individual ${localTerms(country).shares.toLowerCase()}`,
+  term_deposit: localTerms(country).termDeposit, bonds: 'Bonds', other: 'Other',
 }) as Record<Item<'investments'>['kind'], string>;
 const TAX_LABELS: Record<TaxTreatment, string> = {
   returns_after_tax: 'Return entered is after tax',
@@ -77,7 +79,23 @@ const incomeKinds = (country: CountryCode) => ({
 });
 const DEPENDANT_KINDS = { child: 'Child', parent: 'Parent', pet: 'Pet', other: 'Other' };
 const EVENT_KINDS = { money_in: 'Money in (inheritance, lump sum)', money_out: 'Money out (renovation, car, wedding)', sell_property: 'Sell or downsize a property', sell_investment: 'Cash out an investment', reverse_mortgage: 'Reverse mortgage on a property' };
-const WITHDRAWAL_KINDS = { needs: 'Spend my retirement living costs', percent: 'Spend a fixed % of savings each year', guardrails: 'Flexible (guardrails)' };
+const WITHDRAWAL_KINDS = {
+  needs: 'Spend my retirement living costs',
+  six_percent: '6% rule (NZ actuaries)',
+  inflated_four: 'Inflated 4% rule (NZ actuaries)',
+  fixed_date: 'Fixed date rule (NZ actuaries)',
+  guardrails: 'Flexible (guardrails)',
+  percent: 'A % of my savings each year',
+};
+/** Plain explanations of each way to spend savings in retirement. */
+const WITHDRAWAL_HELP: Record<keyof typeof WITHDRAWAL_KINDS, string> = {
+  needs: 'Spend the retirement living costs you entered, however markets do.',
+  six_percent: 'Each year, draw 6% of what your savings were worth when you retired, plus your pensions. Same amount every year (not raised for inflation), so more to spend early on, with some risk of running out.',
+  inflated_four: 'Draw 4% of your savings at retirement, raised each year with inflation, plus your pensions. Lower to start, steadier, and more likely to leave something over.',
+  fixed_date: "Each year, draw what's left divided by the years until an age you choose, plus your pensions; after that, live on your pension and other income.",
+  guardrails: 'Starts at your retirement living costs; cuts spending 10% after bad years and raises it 10% after good ones.',
+  percent: 'Spend a share of your savings each year, so spending rises and falls with your savings.',
+};
 const OWNERS: Record<Owner, string> = { you: 'You', partner: 'Partner', joint: 'Joint' };
 
 const NEW_ITEMS: { [K in ListKey]: (country: CountryCode) => Item<K> } = {
@@ -525,8 +543,8 @@ export default function HouseholdPlanner() {
 
         <Section legend="Money in the bank" note="Everyday and savings accounts. Used first if money runs short.">
           <div className="planner-pair">
-            <Num id="cash" label="How much" unit={c.currency} step={1000} value={plan.cashOnHand} onChange={(v) => set({ cashOnHand: v as number })} />
-            <Num id="cash-rate" label="Interest" unit="%" step={0.25} value={plan.cashInterestPct} onChange={(v) => set({ cashInterestPct: v as number })} />
+            <Num id="cash" label="How much" unit={c.currency} step={1000} value={plan.cashOnHand} onChange={(v) => set({ cashOnHand: v as number })} hint={`Your ${localTerms(plan.country).everydayAccount} and savings accounts added together.`} />
+            <Num id="cash-rate" label="Interest" unit="% a year" step={0.25} value={plan.cashInterestPct} onChange={(v) => set({ cashInterestPct: v as number })} hint={HINTS.cashInterest} />
           </div>
         </Section>
 
@@ -542,8 +560,8 @@ export default function HouseholdPlanner() {
                 {currencyPicker(`inv-${i}-cur`, inv.currency, (v) => setItem('investments', i, { currency: v }))}
                 <Num id={`inv-${i}-bal`} label="Balance" unit={unitOf(inv.currency)} step={1000} value={inv.balance} onChange={(v) => setItem('investments', i, { balance: v as number })} />
                 <div className="planner-pair">
-                  <Num id={`inv-${i}-ret`} label="Yearly growth" unit="%" step={0.25} value={inv.returnPct} onChange={(v) => setItem('investments', i, { returnPct: v as number })} />
-                  <Num id={`inv-${i}-fee`} label="Fees" unit="%" step={0.05} value={inv.feesPct} onChange={(v) => setItem('investments', i, { feesPct: v as number })} />
+                  <Num id={`inv-${i}-ret`} label="Yearly growth" unit="% a year" step={0.25} value={inv.returnPct} onChange={(v) => setItem('investments', i, { returnPct: v as number })} hint={growthHint(inv.kind)} />
+                  <Num id={`inv-${i}-fee`} label="Yearly fees" unit="% a year" step={0.05} value={inv.feesPct} onChange={(v) => setItem('investments', i, { feesPct: v as number })} hint={feesHint(inv.kind)} />
                 </div>
                 <Num id={`inv-${i}-con`} label="Monthly contribution" unit={unitOf(inv.currency)} step={50} value={inv.monthlyContribution} onChange={(v) => setItem('investments', i, { monthlyContribution: v as number })} />
                 <Check label="Contributions stop at retirement" checked={inv.contributionsStopAtRetirement} onChange={(v) => setItem('investments', i, { contributionsStopAtRetirement: v })} />
@@ -558,7 +576,7 @@ export default function HouseholdPlanner() {
                   <Pick id={`inv-${i}-tax`} label="Tax treatment" value={inv.taxTreatment} options={TAX_LABELS} onChange={(v) => setItem('investments', i, { taxTreatment: v })} />
                   {(inv.taxTreatment === 'taxed_yearly' || inv.taxTreatment === 'taxed_on_withdrawal') && (
                     <Num id={`inv-${i}-taxrate`} label="Tax rate" unit="%" step={0.5} value={inv.taxRatePct} onChange={(v) => setItem('investments', i, { taxRatePct: v as number })}
-                      hint={inv.taxTreatment === 'taxed_yearly' ? 'Share of each year\'s return paid in tax' : 'Share of each withdrawal paid in tax. Check current rates.'} />
+                      hint={inv.taxTreatment === 'taxed_yearly' ? `Share of each year's growth paid in tax. ${taxRateHint(plan.country)}` : `Share of each withdrawal paid in tax. ${taxRateHint(plan.country)}`} />
                   )}
                   <Num id={`inv-${i}-access`} label="Can withdraw from age" optional step={0.5} value={inv.accessAge} onChange={(v) => setItem('investments', i, { accessAge: v })}
                     hint={inv.kind === 'kiwisaver' ? 'KiwiSaver defaults to 65' : inv.kind === 'retirement_account' ? (() => { const ac = profile(countryOfCurrency(inv.currency) ?? plan.country).retirementAccount; return `${ac.name} defaults to ${ac.accessAge}. ${ac.note}`; })() : 'Leave blank if you can withdraw any time'} />
@@ -569,7 +587,7 @@ export default function HouseholdPlanner() {
           <AddButton label="Add investment" onClick={() => addItem('investments')} />
         </Section>
 
-        <Section legend="Property" note="Enter what it could sell for and what you still owe separately. Growth is how much its value rises each year. Running costs cover rates, insurance and repairs.">
+        <Section legend="Property" note={`Enter what it could sell for and what you still owe separately. Value growth is how much it rises each year. Running costs cover ${localTerms(plan.country).propertyTax}, insurance and repairs.`}>
           <div className="asset-list">
             {plan.properties.map((p, i) => (
               <Card key={i} title={p.name || 'Property'} onRemove={() => removeItem('properties', i)}>
@@ -578,18 +596,18 @@ export default function HouseholdPlanner() {
                 {currencyPicker(`prop-${i}-cur`, p.currency, (v) => setItem('properties', i, { currency: v }))}
                 <div className="planner-pair">
                   <Num id={`prop-${i}-val`} label="Could sell for" unit={unitOf(p.currency)} step={5000} value={p.value} onChange={(v) => setItem('properties', i, { value: v as number })} />
-                  <Num id={`prop-${i}-g`} label="Growth" unit="%" step={0.25} value={p.growthPct} onChange={(v) => setItem('properties', i, { growthPct: v as number })} />
+                  <Num id={`prop-${i}-g`} label="Value growth" unit="% a year" step={0.25} value={p.growthPct} onChange={(v) => setItem('properties', i, { growthPct: v as number })} hint={HINTS.propertyGrowth} />
                 </div>
                 <div className="planner-pair">
                   <Num id={`prop-${i}-mb`} label="Still owed" unit={unitOf(p.currency)} step={5000} value={p.mortgageBalance} onChange={(v) => setItem('properties', i, { mortgageBalance: v as number })} />
-                  <Num id={`prop-${i}-mr`} label="Interest" unit="%" step={0.1} value={p.mortgageRatePct} onChange={(v) => setItem('properties', i, { mortgageRatePct: v as number })} />
+                  <Num id={`prop-${i}-mr`} label="Mortgage interest" unit="% a year" step={0.1} value={p.mortgageRatePct} onChange={(v) => setItem('properties', i, { mortgageRatePct: v as number })} hint={HINTS.mortgageRate} />
                 </div>
                 <div className="planner-pair">
                   <Num id={`prop-${i}-rp`} label="Repayment" unit="/mo" step={50} value={p.monthlyRepayment} onChange={(v) => setItem('properties', i, { monthlyRepayment: v as number })} />
                   <Num id={`prop-${i}-rent`} label="Rent received" unit="/mo" step={50} value={p.monthlyNetRent} onChange={(v) => setItem('properties', i, { monthlyNetRent: v as number })} />
                 </div>
                 <Num id={`prop-${i}-costs`} label="Running costs" unit="/mo" step={50} value={p.monthlyCosts} onChange={(v) => setItem('properties', i, { monthlyCosts: v as number })}
-                  hint="Rates, insurance, repairs and upkeep. Stops if you sell. Don't count these in living costs too." />
+                  hint={`${localTerms(plan.country).propertyTax.charAt(0).toUpperCase() + localTerms(plan.country).propertyTax.slice(1)}, insurance, repairs and upkeep. Stops if you sell. Don't count these in living costs too.`} />
                 <Num id={`prop-${i}-sell`} label="Plan to sell at age" optional value={linkedEvent('sell_property', p.name)?.atAge}
                   onChange={(v) => setLinkedEvent('sell_property', p.name, { atAge: v })}
                   hint="Optional. Leave blank to keep it. To stay in the home and release some of its value instead, add a reverse mortgage under One-off events." />
@@ -608,7 +626,7 @@ export default function HouseholdPlanner() {
                 {currencyPicker(`oa-${i}-cur`, a.currency, (v) => setItem('otherAssets', i, { currency: v }))}
                 <div className="planner-pair">
                   <Num id={`oa-${i}-val`} label="Value" unit={unitOf(a.currency)} step={1000} value={a.value} onChange={(v) => setItem('otherAssets', i, { value: v as number })} />
-                  <Num id={`oa-${i}-ch`} label="Change" unit="%" step={1} optional value={a.changePct} onChange={(v) => setItem('otherAssets', i, { changePct: v })} />
+                  <Num id={`oa-${i}-ch`} label="Change in value" unit="% a year" step={1} optional value={a.changePct} onChange={(v) => setItem('otherAssets', i, { changePct: v })} hint={`${HINTS.vehicleLoss} Enter a loss as a minus number, e.g. -15.`} />
                 </div>
               </Card>
             ))}
@@ -624,7 +642,7 @@ export default function HouseholdPlanner() {
                 {currencyPicker(`debt-${i}-cur`, d.currency, (v) => setItem('debts', i, { currency: v }))}
                 <div className="planner-pair">
                   <Num id={`debt-${i}-bal`} label="Still owed" unit={unitOf(d.currency)} step={500} value={d.balance} onChange={(v) => setItem('debts', i, { balance: v as number })} />
-                  <Num id={`debt-${i}-rate`} label="Interest" unit="%" step={0.5} value={d.ratePct} onChange={(v) => setItem('debts', i, { ratePct: v as number })} />
+                  <Num id={`debt-${i}-rate`} label="Interest" unit="% a year" step={0.5} value={d.ratePct} onChange={(v) => setItem('debts', i, { ratePct: v as number })} hint="From your loan or card statement." />
                 </div>
                 <Num id={`debt-${i}-pay`} label="Payment" unit="/mo" step={50} value={d.monthlyPayment} onChange={(v) => setItem('debts', i, { monthlyPayment: v as number })} />
               </Card>
@@ -678,8 +696,17 @@ export default function HouseholdPlanner() {
             <Num id="withdrawal-rate" label="Share of savings spent each year" unit="%" step={0.25} value={plan.withdrawal.ratePct}
               onChange={(v) => set({ withdrawal: { ...plan.withdrawal, ratePct: v as number } })} hint="Spending rises and falls with your savings" />
           )}
-          {plan.withdrawal.strategy === 'guardrails' && (
-            <p className="asset-editor-note">Starts at your retirement living costs. Cuts spending 10% when withdrawals climb well above where they started, and raises it 10% when markets do well.</p>
+          <p className="asset-editor-note">{WITHDRAWAL_HELP[plan.withdrawal.strategy]}</p>
+          {plan.withdrawal.strategy === 'fixed_date' && (
+            <Num id="withdrawal-until" label="Make savings last until age" value={plan.withdrawal.untilAge ?? 85}
+              onChange={(v) => set({ withdrawal: { ...plan.withdrawal, untilAge: v as number } })} />
+          )}
+          {['six_percent', 'inflated_four', 'fixed_date'].includes(plan.withdrawal.strategy) && (
+            <p className="asset-editor-note">
+              Rules of thumb from the NZ Society of Actuaries&apos; Retirement Income Interest Group, also used by{' '}
+              <a href="https://sorted.org.nz/tools/retirement-navigator" target="_blank" rel="noopener noreferrer">Sorted&apos;s retirement navigator</a>.
+              The navigator also offers a life expectancy rule.
+            </p>
           )}
         </Section>
 
@@ -748,7 +775,7 @@ export default function HouseholdPlanner() {
                       <Num id={`ev-${i}-rmmonth`} label="Regular payment" unit="/mo" step={100} value={ev.monthlyAmount} onChange={(v) => setItem('events', i, { monthlyAmount: v as number })} hint="0 if none" />
                     </div>
                     <Num id={`ev-${i}-rmrate`} label="Interest rate" unit="% a year" step={0.25} value={ev.loanRatePct} onChange={(v) => setItem('events', i, { loanRatePct: v as number })}
-                      hint="Interest compounds because nothing is repaid. Check current rates with providers." />
+                      hint={`Interest compounds because nothing is repaid. ${HINTS.reverseMortgageRate}`} />
                     <p className="asset-editor-note">You keep living in the home. The loan, with its interest, is repaid when the home is sold or at the end of the plan, and can&apos;t grow beyond the home&apos;s value.</p>
                   </>
                 ) : ev.kind === 'sell_investment' ? (
@@ -769,7 +796,7 @@ export default function HouseholdPlanner() {
                     ) : <p className="asset-editor-note">Add a property first.</p>}
                     <div className="planner-pair">
                       <Num id={`ev-${i}-repl`} label="Buy instead" unit={c.currency} step={10000} value={ev.replacementValue} onChange={(v) => setItem('events', i, { replacementValue: v as number })} hint="0 if not replacing it" />
-                      <Num id={`ev-${i}-cost`} label="Selling costs" unit="% of price" step={0.5} value={ev.sellingCostsPct} onChange={(v) => setItem('events', i, { sellingCostsPct: v as number })} hint="Agent and legal fees" />
+                      <Num id={`ev-${i}-cost`} label="Selling costs" unit="% of price" step={0.5} value={ev.sellingCostsPct} onChange={(v) => setItem('events', i, { sellingCostsPct: v as number })} hint={HINTS.sellingCosts} />
                     </div>
                   </>
                 ) : (
@@ -818,7 +845,7 @@ export default function HouseholdPlanner() {
             {plan.compare.map((cmp, i) => (
               <div className="planner-compare-row" key={i}>
                 <Text id={`cmp-${i}-label`} label="Label" value={cmp.label} onChange={(v) => setItem('compare', i, { label: v })} />
-                <Num id={`cmp-${i}-ret`} label="Return" unit="%" step={0.25} value={cmp.investmentReturnPct} onChange={(v) => setItem('compare', i, { investmentReturnPct: v as number })} />
+                <Num id={`cmp-${i}-ret`} label="Yearly growth" unit="% a year" step={0.25} value={cmp.investmentReturnPct} onChange={(v) => setItem('compare', i, { investmentReturnPct: v as number })} hint={HINTS.compareReturn} />
                 <button type="button" className="asset-remove" aria-label={`Remove ${cmp.label}`} onClick={() => removeItem('compare', i)}>×</button>
               </div>
             ))}
@@ -828,11 +855,11 @@ export default function HouseholdPlanner() {
 
         <details className="calc-more">
           <summary>Inflation, reinvested savings and market swings</summary>
-          <Num id="infl" label="Inflation" unit="% a year" step={0.1} value={plan.inflationPct} onChange={(v) => set({ inflationPct: v as number })} />
+          <Num id="infl" label="Inflation (how fast prices rise)" unit="% a year" step={0.1} value={plan.inflationPct} onChange={(v) => set({ inflationPct: v as number })} hint={inflationHint(plan.country)} />
           <Num id="surplus" label="Return on reinvested surplus" unit="% a year" step={0.25} value={plan.surplusReturnPct}
-            onChange={(v) => set({ surplusReturnPct: v as number })} hint="Money left over each month is invested at this rate" />
+            onChange={(v) => set({ surplusReturnPct: v as number })} hint={HINTS.surplusReturn} />
           <Num id="vol" label="Market ups and downs" unit="% a year" step={1} value={plan.volatilityPct}
-            onChange={(v) => set({ volatilityPct: v as number })} hint="Used for the simulated markets. Share-heavy portfolios often swing 15% or more a year; balanced ones less." />
+            onChange={(v) => set({ volatilityPct: v as number })} hint={HINTS.volatility} />
         </details>
 
         <p className="calc-privacy">
@@ -884,6 +911,7 @@ export default function HouseholdPlanner() {
               </p>
             </section>
 
+            <BufferCheck result={shown} />
             <HouseholdWarnings result={shown} />
             <HouseholdHeadline result={shown} />
             <HouseholdChart result={shown} height={320} />

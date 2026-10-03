@@ -161,5 +161,14 @@
     "note": "Delete this example. licence must be one of own-content, public-domain, cc-by, permission-granted, licensed, personal-study-only.",
     "country": "GLOBAL",
     "reviewEveryMonths": 12
+  },
+  "Retirement_Guides/drawdown-rules-of-thumb.md": {
+    "title": "Drawdown rules of thumb for spending savings in retirement (as at September 2026)",
+    "url": "https://actuaries.org.nz/content/uploads/2022/03/NZSA-full-doc.pdf",
+    "licence": "own-content",
+    "publisher": "Investment Research Library",
+    "asOf": "2026-10-01",
+    "country": "NZ",
+    "reviewEveryMonths": 12
   }
 }

@@ -519,3 +519,57 @@ test('reverse mortgage debt is shown separately and the analysis flags its growt
   const a = analyseHousehold(r);
   assert.ok(a.risks.some((f) => f.title === 'Reverse mortgage debt grows'));
 });
+
+const RETIREE: HouseholdInput = {
+  you: { currentAge: 65, retirementAge: 65 }, endAge: 95, inflationPct: 2,
+  investments: [{ name: 'Fund', balance: 500_000, returnPct: 0 }],
+  livingExpensesMonthly: 3_000,
+};
+
+test('6% rule: 6% of savings at retirement, the same amount each year', () => {
+  const r = projectHousehold({ ...RETIREE, withdrawal: { strategy: 'six_percent' } }, { monteCarlo: false });
+  const s = r.scenarios[1].series;
+  // 30,000 a year in money of the day, so it falls in today's money as prices rise
+  near(s[1].spending, 30_000 / 1.01, 400);
+  assert.ok(s[5].spending < s[1].spending, 'not raised for inflation');
+});
+
+test('inflated 4% rule: 4% of savings at retirement, raised with inflation', () => {
+  const r = projectHousehold({ ...RETIREE, withdrawal: { strategy: 'inflated_four' } }, { monteCarlo: false });
+  const s = r.scenarios[1].series;
+  near(s[1].spending, 20_000, 400); // about the same in today's money each year
+  near(s[6].spending, 20_000, 600);
+});
+
+test('fixed date rule: savings run down to the chosen age, then spending matches pension income', () => {
+  const r = projectHousehold({
+    ...RETIREE, inflationPct: 0,
+    incomes: [{ name: 'NZ Super', kind: 'pension', monthlyAmount: 2_000 }],
+    withdrawal: { strategy: 'fixed_date', untilAge: 85 },
+  }, { monteCarlo: false });
+  const s = r.scenarios[1].series;
+  near(s[1].spending, 500_000 / 20 + 24_000, 1); // year one: savings ÷ 20 years, plus NZ Super on top
+  near(s[20].liquid, 0, 20_000);        // close to nothing left at 85
+  near(s[25].spending, 24_000, 1);      // after 85, spending = NZ Super
+  assert.equal(r.scenarios[1].shortfallAge, null);
+});
+
+test('portfolio mix: by asset, type, currency, growth/defensive, and yearly fees', () => {
+  const r = projectHousehold({
+    you: { currentAge: 50, retirementAge: 65 },
+    cashOnHand: 20_000,
+    investments: [
+      { name: 'Index', kind: 'index_fund', balance: 120_000, returnPct: 7, feesPct: 0.2 },
+      { name: 'Term', kind: 'term_deposit', balance: 30_000, returnPct: 4, feesPct: 0, currency: 'AUD' },
+    ],
+    fx: [{ currency: 'AUD', rate: 1.1 }],
+    properties: [{ name: 'Home', value: 700_000 }],
+  }, { monteCarlo: false });
+  const mix = analyseHousehold(r).mix;
+  assert.equal(mix.byAsset[0].label, 'Property');
+  assert.ok(mix.byInvestmentType.some((s) => s.label === 'Index funds / ETFs'));
+  assert.ok(mix.byCurrency.some((s) => s.label === 'AUD'));
+  near(mix.growthDefensive.find((s) => s.label.startsWith('Growth'))!.value, 120_000, 1);
+  near(mix.growthDefensive.find((s) => s.label.startsWith('Defensive'))!.value, 20_000 + 33_000, 1);
+  near(mix.feesPerYear, 240, 0.01);
+});

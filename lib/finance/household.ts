@@ -141,9 +141,12 @@ export const FxSchema = z.object({
 });
 
 export const WithdrawalSchema = z.object({
-  strategy: z.enum(['needs', 'percent', 'guardrails']).default('needs')
-    .describe('needs: spend the retirement living costs entered. percent: spend ratePct of cash and investments each year. guardrails: start from living costs, cut 10% when withdrawals get too high and raise 10% when markets do well.'),
+  strategy: z.enum(['needs', 'percent', 'guardrails', 'six_percent', 'inflated_four', 'fixed_date']).default('needs')
+    .describe('needs: spend the retirement living costs entered. percent: spend ratePct of cash and investments each year. guardrails: start from living costs, cut 10% when withdrawals get too high and raise 10% when markets do well. '
+      + 'Rules of thumb from the NZ Society of Actuaries (used by Sorted\'s retirement navigator): six_percent: each year take 6% of savings at retirement, not raised for inflation. '
+      + 'inflated_four: take 4% of savings at retirement, raised each year with inflation. fixed_date: each year take savings divided by the years left until untilAge, then live on pensions.'),
   ratePct: z.number().min(1).max(15).default(4),
+  untilAge: z.number().int().min(60).max(110).optional().describe('For fixed_date: the age your savings should last until'),
 });
 
 export const StrategySchema = z.object({
@@ -417,6 +420,8 @@ function simulate(h: Household, o: SimOptions): SimResult {
   let retLiving: number | null = null; // nominal monthly
   let retStart: number | null = null;
   let initialRate = 0;
+  let startingSavings: number | null = null;
+  let afterFixedDate = false;
 
   const point = (m: number, year: YearTotals): HouseholdPoint => {
     const d = infl(m);
@@ -585,7 +590,25 @@ function simulate(h: Household, o: SimOptions): SimResult {
         retStart ??= m;
         const anniversary = (m - retStart) % 12 === 0;
         const liquid = cash + pot + sum(inv);
-        if (h.withdrawal.strategy === 'percent') {
+        const strategy = h.withdrawal.strategy;
+        if (strategy === 'six_percent' || strategy === 'inflated_four') {
+          // Rules of thumb based on savings at retirement: 6% fixed, or 4% raised with inflation
+          startingSavings ??= liquid;
+          const rate = strategy === 'six_percent' ? 0.06 : 0.04;
+          const yearsRetired = (m - retStart) / 12;
+          const inflationSince = strategy === 'inflated_four' ? Math.pow(1 + h.inflationPct / 100, Math.floor(yearsRetired)) : 1;
+          if (anniversary) retLiving = (rate * startingSavings * inflationSince) / 12;
+        } else if (strategy === 'fixed_date') {
+          // Spread what's left over the years to the chosen age; after it, live on pensions
+          const until = h.withdrawal.untilAge ?? 85;
+          const age = ageOf('you', m);
+          if (age >= until) {
+            retLiving = 0;
+            afterFixedDate = true;
+          } else if (anniversary) {
+            retLiving = liquid / Math.max(1, until - Math.floor(age)) / 12;
+          }
+        } else if (strategy === 'percent') {
           if (anniversary) retLiving = Math.max(0, (h.withdrawal.ratePct / 100) * liquid) / 12;
         } else if (anniversary) {
           if (retLiving === null) {
@@ -598,7 +621,12 @@ function simulate(h: Household, o: SimOptions): SimResult {
             else if (initialRate > 0 && rate < initialRate * 0.8) retLiving *= 1.1;
           }
         }
-        living = retLiving ?? needsLiving;
+        // Drawdown rules set what comes out of savings; pensions and other income are spent on top.
+        // After the fixed date, spending matches the pension and other income coming in.
+        const drawdownRule = strategy === 'six_percent' || strategy === 'inflated_four' || strategy === 'fixed_date' || strategy === 'percent';
+        living = afterFixedDate ? Math.max(0, income)
+          : drawdownRule ? (retLiving ?? 0) + Math.max(0, income)
+          : retLiving ?? needsLiving;
       }
     }
     let spending = living;
@@ -918,6 +946,9 @@ export function projectHousehold(
     needs: 'In retirement, the household spends the living costs entered.',
     percent: `In retirement, the household spends ${h.withdrawal.ratePct}% of its cash and investments each year, so spending rises and falls with markets.`,
     guardrails: 'In retirement, spending starts at the living costs entered, is cut 10% when withdrawals climb 20% above their starting rate, and raised 10% when they fall 20% below it.',
+    six_percent: 'In retirement, the 6% rule of thumb (NZ Society of Actuaries): each year you draw 6% of what your savings were worth when you retired (not raised for inflation), and spend pensions and other income on top.',
+    inflated_four: 'In retirement, the inflated 4% rule of thumb (NZ Society of Actuaries): you draw 4% of your savings at retirement, raised each year with inflation, and spend pensions and other income on top.',
+    fixed_date: `In retirement, the fixed date rule of thumb (NZ Society of Actuaries): each year you draw what's left divided by the years until age ${h.withdrawal.untilAge ?? 85}, plus pensions and other income; after that age you live on pensions and other income.`,
   }[h.withdrawal.strategy];
 
   return {

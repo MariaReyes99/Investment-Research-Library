@@ -1,7 +1,7 @@
 'use client';
 /**
  * Reads the plan this person built in the wealth projector, from this browser.
- * Prefers the "All details" plan (more complete); otherwise converts the
+ * Prefers the "Advanced" plan (more complete); otherwise converts the
  * guided answers. Nothing leaves the device unless the chat's "Include my
  * plan" switch is on.
  */

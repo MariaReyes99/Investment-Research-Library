@@ -3,18 +3,21 @@
  * Guided setup for the wealth projector: one topic per screen, plain words,
  * a short reason for each question, and no example numbers filled in.
  * Everything stays on this device. At the end it shows the results, and
- * "See every detail" opens the same plan in the full form.
+ * "Open in Advanced" opens the same plan in the Advanced view.
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { CURRENCIES, projectHousehold, usedCurrencies, type Currency, type HouseholdInput } from '../lib/finance/household';
 import { analyseHousehold } from '../lib/finance/householdAnalysis';
 import { projectorLink } from '../lib/finance/householdLink';
-import { COUNTRIES, COUNTRY_CODES, moneyFor, profile, retirementSavingsLabel, type CountryCode } from '../lib/countries';
+import { COUNTRIES, COUNTRY_CODES, localTerms, moneyFor, profile, retirementSavingsLabel, type CountryCode } from '../lib/countries';
+import { HINTS, feesHint, growthHint, inflationHint } from '../lib/fieldGuide';
 import { BasisLabel, CountrySelect, RetireInSelect, useCountry, useRetireIn } from './CountryPicker';
 import { HouseholdAnalysisView, HouseholdChart, HouseholdWarnings } from './HouseholdCharts';
 import StatementImport from './StatementImport';
 import ClearDeviceData from './ClearDeviceData';
 import PlanFileActions from './PlanFileActions';
+import TrustedTools from './TrustedTools';
+import BufferCheck from './BufferCheck';
 
 type Style = 'careful' | 'balanced' | 'growth';
 const STYLE_RETURN: Record<Style, number> = { careful: 4, balanced: 5.5, growth: 7 };
@@ -54,6 +57,9 @@ export interface Answers {
   car?: number; carLossPct?: number; valuables?: number; valuablesChangePct?: number;
   otherCosts?: OtherCost[];
   inflationPct?: number;
+  /** How savings are used in retirement */
+  drawdown?: 'needs' | 'six_percent' | 'inflated_four' | 'fixed_date' | 'guardrails';
+  drawdownUntil?: number;
 }
 
 const START: Answers = { who: 'me', savings: [], homes: [], family: [], foreignPensions: [] };
@@ -80,7 +86,7 @@ function saveGuided(a: Answers, step: number, base: Base | null) {
     else window.localStorage.setItem(GUIDED_KEY, JSON.stringify({ a, step, base: base ?? undefined, at: Date.now() }));
   } catch { /* private browsing: answers last for this visit only */ }
 }
-/** The "All details" plan, if it was changed more recently than the guided answers. */
+/** The "Advanced" plan, if it was changed more recently than the guided answers. */
 function newerFullPlan(guidedAt: number): HouseholdInput | null {
   try {
     const at = Number(window.localStorage.getItem(FULL_AT_KEY)) || 0;
@@ -177,6 +183,7 @@ export function answersToPlan(a: Answers, country: CountryCode, retireIn: Countr
       ...(n(a.bigSpend) > 0 && n(a.bigSpendAge) > age ? [{ name: 'Big purchase', kind: 'money_out' as const, atAge: n(a.bigSpendAge), amount: n(a.bigSpend) }] : []),
     ],
     goal: n(a.goal) > 0 ? { targetNetWorth: n(a.goal) } : undefined,
+    withdrawal: { strategy: a.drawdown ?? 'needs', ratePct: 4, untilAge: a.drawdown === 'fixed_date' ? Math.max(age + 1, n(a.drawdownUntil) || 85) : undefined },
     // Until pay or spending is entered, assume savings come from income we haven't been told about yet
     contributionsFromOutsideIncome: a.pay === undefined && a.partnerPay === undefined && a.spending === undefined,
   };
@@ -190,7 +197,7 @@ export function answersToPlan(a: Answers, country: CountryCode, retireIn: Countr
 const pos = (x: number | undefined) => (x !== undefined && Number.isFinite(x) && x > 0 ? x : undefined);
 const sumOf = (xs: number[]) => xs.reduce((s, x) => s + x, 0);
 
-/** Turns an "All details" plan into guided answers, so the guided setup shows the latest numbers. */
+/** Turns an "Advanced" plan into guided answers, so the guided setup shows the latest numbers. */
 export function planToAnswers(p: HouseholdInput): Answers {
   const home = COUNTRIES[p.country ?? 'NZ'].currency as Currency;
   const events = p.events ?? [];
@@ -250,11 +257,13 @@ export function planToAnswers(p: HouseholdInput): Answers {
     valuables: pos(sumOf(valuables.map((v) => v.value))), valuablesChangePct: valuables[0]?.changePct,
     gift: pos(moneyIn?.amount), giftAge: moneyIn?.atAge, bigSpend: pos(moneyOut?.amount), bigSpendAge: moneyOut?.atAge,
     goal: pos(p.goal?.targetNetWorth), inflationPct: p.inflationPct,
+    drawdown: p.withdrawal?.strategy && p.withdrawal.strategy !== 'percent' ? p.withdrawal.strategy : undefined,
+    drawdownUntil: p.withdrawal?.untilAge,
   };
 }
 
 /**
- * Builds the plan from the guided answers on top of an "All details" plan.
+ * Builds the plan from the guided answers on top of an "Advanced" plan.
  * Sections the person hasn't changed in the guided steps are kept exactly as
  * they were (tax settings, mortgage rates, owners, extra debts and so on);
  * changed sections take the guided answers, keeping hidden details by name.
@@ -299,6 +308,7 @@ export function mergeWithBase(base: HouseholdInput, baseAnswers: Answers, a: Ans
     }),
     goal: same(['goal']) ? base.goal : fresh.goal,
     inflationPct: same(['inflationPct']) ? base.inflationPct : fresh.inflationPct,
+    withdrawal: same(['drawdown', 'drawdownUntil']) ? base.withdrawal : fresh.withdrawal,
     contributionsFromOutsideIncome: false,
   };
   // An exchange rate for every currency now used
@@ -383,7 +393,7 @@ function CurrencyPick({ id, label, value, home, onChange }: { id: string; label:
   );
 }
 
-/** Opens a plan in the "All details" view. */
+/** Opens a plan in the "Advanced" view. */
 export function openInAllDetails(plan: HouseholdInput) {
   window.location.assign(projectorLink(plan).replace('/calculator#', '/calculator?view=full#'));
 }
@@ -396,7 +406,7 @@ export default function PlannerWizard({ onPlanChange }: { onPlanChange?: (plan: 
   const [restored, setRestored] = useState(false);
   const [base, setBase] = useState<Base | null>(null);
   const [synced, setSynced] = useState(false);
-  // Bring back earlier answers, or the newer "All details" plan if it was changed since
+  // Bring back earlier answers, or the newer "Advanced" plan if it was changed since
   useEffect(() => {
     const saved = loadGuided();
     const full = newerFullPlan(saved?.at ?? 0);
@@ -434,7 +444,7 @@ export default function PlannerWizard({ onPlanChange }: { onPlanChange?: (plan: 
   }, [a, country, retireIn, rates, base]);
   const touched = a !== START;
 
-  // Share the plan so switching to "All details" keeps every answer
+  // Share the plan so switching to "Advanced" keeps every answer
   useEffect(() => { onPlanChange?.(touched ? livePlan : null); }, [livePlan, touched, onPlanChange]);
 
   // Today's exchange rates for any other currencies in the plan
@@ -500,7 +510,7 @@ export default function PlannerWizard({ onPlanChange }: { onPlanChange?: (plan: 
       why: 'Everyday and savings accounts: the money you could use for an emergency.',
       body: (
         <>
-          <Field id="wiz-bank" label="How much is in your bank accounts?" help={`Add up everyday and savings accounts. Leave out ${retirementSavingsLabel(country)} and investments; they come next.`} value={a.bank} onChange={(v) => set({ bank: v })} prefix={cur} />
+          <Field id="wiz-bank" label="How much is in your bank accounts?" help={`Add up your ${localTerms(country).everydayAccount} and savings accounts. Leave out ${retirementSavingsLabel(country)} and investments; they come next.`} value={a.bank} onChange={(v) => set({ bank: v })} prefix={cur} />
           <StatementImport money={money} onApply={(s) => set({
             bank: s.bank ?? a.bank, pay: s.pay ?? a.pay, spending: s.spending ?? a.spending,
           })} />
@@ -518,13 +528,13 @@ export default function PlannerWizard({ onPlanChange }: { onPlanChange?: (plan: 
             return (
               <Card key={i} title={s.name || 'Savings'} onRemove={() => set({ savings: a.savings.filter((_, j) => j !== i) })}>
                 <Choice name={`wiz-kind-${i}`} value={s.kind === 'investments' ? 'index' : s.kind}
-                  onChange={(v) => upd({ kind: v, name: { retirement: retirementSavingsLabel(country), index: 'Index fund', managed: 'Managed fund', shares: 'Shares', term: 'Term deposit', other: 'Other savings', investments: 'Index fund' }[v] })}
+                  onChange={(v) => upd({ kind: v, name: { retirement: retirementSavingsLabel(country), index: 'Index fund', managed: 'Managed fund', shares: localTerms(country).shares, term: localTerms(country).termDeposit, other: 'Other savings', investments: 'Index fund' }[v] })}
                   options={[
                     ['retirement', retirementSavingsLabel(country), 'Retirement savings'],
                     ['index', 'Index funds / ETFs', 'Follow a whole market, low fees'],
                     ['managed', 'Managed funds', 'A manager picks investments'],
-                    ['shares', 'Individual shares', 'Shares in single companies'],
-                    ['term', 'Term deposit', 'Fixed interest at a bank'],
+                    ['shares', `Individual ${localTerms(country).shares.toLowerCase()}`, 'In single companies'],
+                    ['term', localTerms(country).termDeposit, 'Fixed interest at a bank'],
                     ['other', 'Something else'],
                   ]} />
                 {a.abroad && <CurrencyPick id={`wiz-savc-${i}`} label="Which currency is it in?" value={s.currency} home={homeCur} onChange={(v) => upd({ currency: v })} />}
@@ -546,9 +556,9 @@ export default function PlannerWizard({ onPlanChange }: { onPlanChange?: (plan: 
                 )}
                 <More label="Fine-tune growth and fees (optional)">
                   <div className="wizard-pair">
-                    <Field id={`wiz-savg-${i}`} label="How much do you expect it to grow each year?" help="Before fees. Leave blank to use the choice above."
+                    <Field id={`wiz-savg-${i}`} label="How much do you expect it to grow each year?" help={`${growthHint(s.kind === 'retirement' ? 'retirement_account' : s.kind === 'term' ? 'term_deposit' : s.kind === 'managed' ? 'managed_fund' : s.kind === 'shares' ? 'shares' : s.kind === 'other' ? 'other' : 'index_fund')} Leave blank to use the choice above.`}
                       value={s.growthPct} onChange={(v) => upd({ growthPct: v })} suffix="% a year" placeholder={String(s.kind === 'term' ? 4 : STYLE_RETURN[s.style])} />
-                    <Field id={`wiz-savf-${i}`} label="Yearly fees and costs" help="Management and platform fees, from your fund's fact sheet. These slowly eat into growth."
+                    <Field id={`wiz-savf-${i}`} label="Yearly fees and costs" help={`${feesHint(s.kind === 'retirement' ? 'retirement_account' : s.kind === 'term' ? 'term_deposit' : s.kind === 'managed' ? 'managed_fund' : s.kind === 'shares' ? 'shares' : s.kind === 'other' ? 'other' : 'index_fund')} Fees slowly eat into growth.`}
                       value={s.feesPct} onChange={(v) => upd({ feesPct: v })} suffix="% a year" placeholder={String(DEFAULT_FEES[s.kind])} />
                   </div>
                 </More>
@@ -581,9 +591,9 @@ export default function PlannerWizard({ onPlanChange }: { onPlanChange?: (plan: 
                   <Field id={`wiz-hr-${i}`} label="Rent you receive each month" help="Only if you rent it out. Running costs go in the next box." value={h.rent} onChange={(v) => upd({ rent: v })} prefix={a.abroad && h.currency ? h.currency : cur} />
                 </div>
                 <div className="wizard-pair">
-                  <Field id={`wiz-hcost-${i}`} label="Running costs each year" help="Rates, insurance, repairs and upkeep. Don't count these in everyday spending too."
+                  <Field id={`wiz-hcost-${i}`} label="Running costs each year" help={`${localTerms(country).propertyTax.charAt(0).toUpperCase() + localTerms(country).propertyTax.slice(1)}, insurance, repairs and upkeep. Don't count these in everyday spending too.`}
                     value={h.yearlyCosts} onChange={(v) => upd({ yearlyCosts: v })} prefix={a.abroad && h.currency ? h.currency : cur} />
-                  <Field id={`wiz-hg-${i}`} label="How much might its value grow each year?" help="Leave blank for 3%, a common long-run assumption."
+                  <Field id={`wiz-hg-${i}`} label="How much might its value grow each year?" help={`${HINTS.propertyGrowth} Leave blank for 3%.`}
                     value={h.growthPct} onChange={(v) => upd({ growthPct: v })} suffix="% a year" placeholder="3" />
                 </div>
                 <More label="Stay in the home and release money from it instead (reverse mortgage)">
@@ -593,7 +603,7 @@ export default function PlannerWizard({ onPlanChange }: { onPlanChange?: (plan: 
                   </p>
                   <div className="wizard-pair">
                     <Field id={`wiz-rma-${i}`} label="From what age?" value={h.rmAge} onChange={(v) => upd({ rmAge: v })} suffix="years" placeholder="e.g. 70" />
-                    <Field id={`wiz-rmr-${i}`} label="Interest rate" help="Check current rates with providers." value={h.rmRate} onChange={(v) => upd({ rmRate: v === undefined ? undefined : Math.min(25, v) })} suffix="% a year" placeholder="9" />
+                    <Field id={`wiz-rmr-${i}`} label="Interest rate" help={HINTS.reverseMortgageRate} value={h.rmRate} onChange={(v) => upd({ rmRate: v === undefined ? undefined : Math.min(25, v) })} suffix="% a year" placeholder="9" />
                   </div>
                   <div className="wizard-pair">
                     <Field id={`wiz-rml-${i}`} label="A lump sum" value={h.rmLump} onChange={(v) => upd({ rmLump: v })} prefix={cur} />
@@ -672,6 +682,25 @@ export default function PlannerWizard({ onPlanChange }: { onPlanChange?: (plan: 
         <>
           <Field id="wiz-spend" label="Everyday spending each month" help="Leave out mortgage payments and money you put into savings; we've counted those already. If you used a bank statement, take them off this number." value={a.spending} onChange={(v) => set({ spending: v })} prefix={cur} />
           <Field id="wiz-spendr" label="Spending each month once you've stopped working" help={retireIn && retireIn !== country ? `In ${COUNTRIES[retireIn].currency}, as you'll live in ${COUNTRIES[retireIn].name}. Leave blank to keep the same as now.` : 'Often a bit less (no commuting) or more (travel). Leave blank to keep it the same.'} value={a.spendingRetired} onChange={(v) => set({ spendingRetired: v })} prefix={retireIn && retireIn !== country ? COUNTRIES[retireIn].currency : cur} />
+          <p className="wizard-q">How would you like to use your savings once you stop working?</p>
+          <Choice name="wiz-draw" value={a.drawdown ?? 'needs'} onChange={(v) => set({ drawdown: v })}
+            options={[
+              ['needs', 'Cover my spending', 'Use the spending figure above'],
+              ['six_percent', '6% rule', 'More early on, some risk later'],
+              ['inflated_four', 'Inflated 4% rule', 'Steady, rises with prices'],
+              ['fixed_date', 'Fixed date rule', 'Spread it to an age you pick'],
+              ['guardrails', 'Flexible', 'Less after bad years, more after good'],
+            ]} />
+          {a.drawdown === 'fixed_date' && (
+            <Field id="wiz-drawu" label="Make my savings last until what age?" help={`After that, you live on ${c.pension.name} or other pensions.`} value={a.drawdownUntil} onChange={(v) => set({ drawdownUntil: v })} suffix="years" placeholder="85" />
+          )}
+          {a.drawdown && a.drawdown !== 'needs' && a.drawdown !== 'guardrails' && (
+            <p className="wizard-help">
+              A rule of thumb from the NZ Society of Actuaries, also used by{' '}
+              <a href="https://sorted.org.nz/tools/retirement-navigator" target="_blank" rel="noopener noreferrer">Sorted&apos;s retirement navigator</a>.
+              It sets how much you take from your savings each year; your pensions are spent on top.
+            </p>
+          )}
           <div className="wizard-pair">
             <Field id="wiz-loan" label="Other loans you owe" help="Car loans, personal loans, credit cards." value={a.loanOwe} onChange={(v) => set({ loanOwe: v })} prefix={cur} />
             <Field id="wiz-loanp" label="Paying back each month" value={a.loanPayment} onChange={(v) => set({ loanPayment: v })} prefix={cur} />
@@ -736,7 +765,7 @@ export default function PlannerWizard({ onPlanChange }: { onPlanChange?: (plan: 
         <>
           <Field id="wiz-goal" label="How much would you like to have by the time you stop working?" help="Everything you own minus what you owe, in today's money. Leave blank to skip." value={a.goal} onChange={(v) => set({ goal: v })} prefix={cur} />
           <Field id="wiz-infl" label="How fast do you expect prices to rise each year (inflation)?"
-            help={`Leave blank for ${c.inflationPct}%. Your pay, costs and pensions rise by this much each year, and results are shown in today's money so they're easy to compare.`}
+            help={`${inflationHint(country)} Leave blank for ${c.inflationPct}%. Results are shown in today's money so they're easy to compare.`}
             value={a.inflationPct} onChange={(v) => set({ inflationPct: v === undefined ? undefined : Math.min(20, v) })} suffix="% a year" placeholder={String(c.inflationPct)} />
         </>
       ),
@@ -792,6 +821,7 @@ export default function PlannerWizard({ onPlanChange }: { onPlanChange?: (plan: 
                 {r.goal.onTrack ? `🎯 You're on track for your ${money(r.goal.target)} goal.` : `🎯 You're about ${money(r.goal.gap)} short of your ${money(r.goal.target)} goal. The ideas below show what could close the gap.`}
               </p>
             )}
+            <BufferCheck result={r} />
             <BasisLabel country={r.inputs.country} inflationPct={r.inputs.inflationPct} retireIn={r.inputs.retireIn} fx={r.inputs.fx} />
             <HouseholdChart result={r} height={300} />
             <HouseholdWarnings result={r} />
@@ -801,9 +831,10 @@ export default function PlannerWizard({ onPlanChange }: { onPlanChange?: (plan: 
         <div className="wizard-nav">
           <button type="button" className="wizard-button is-quiet" onClick={() => go(0)}>← Change my answers</button>
           <button type="button" className="start-again" onClick={() => { if (window.confirm('Clear all your answers and start again?')) { resetAll(); go(0); } }}>🧹 Start again</button>
-          {plan && <button type="button" className="wizard-button" onClick={() => openInAllDetails(plan)}>See every detail and fine-tune</button>}
+          {plan && <button type="button" className="wizard-button" onClick={() => openInAllDetails(plan)}>Open in Advanced to fine-tune</button>}
         </div>
         <PlanFileActions plan={plan} onOpen={openInAllDetails} />
+        <TrustedTools compact />
         <p className="wizard-privacy">🔒 Worked out on this device. Nothing was sent to us. <ClearDeviceData label="Clear my answers from this device" onCleared={() => { resetAll(); go(0); }} /></p>
         <p className="disclaimer-note">These are illustrations based on your answers, not predictions or financial advice.</p>
       </section>
@@ -829,7 +860,7 @@ export default function PlannerWizard({ onPlanChange }: { onPlanChange?: (plan: 
       </div>
       {synced && step > 0 && (
         <p className="wizard-synced" role="status">
-          ✓ Updated with the changes you made in &quot;All details&quot;. Anything the guided steps don&apos;t ask about is kept as you set it there.
+          ✓ Updated with the changes you made in &quot;Advanced&quot;. Anything the guided steps don&apos;t ask about is kept as you set it there.
           <button type="button" className="link-button" onClick={() => setSynced(false)}>OK</button>
         </p>
       )}

@@ -4,6 +4,7 @@
  * schedule. Used by the /sources page and by `npm run check:sources`.
  */
 import manifest from '../data/corpus/sources.json';
+import { FUND_FEES, FUND_FEES_AS_OF, FUND_FEES_REVIEW_MONTHS } from './fundFees';
 
 export type SourceRecord = {
   path: string;
@@ -27,7 +28,11 @@ function addMonths(iso: string, months: number): Date {
 }
 
 export function sourcesRegister(today = new Date()): SourceRecord[] {
-  return Object.entries(manifest as Record<string, Entry>)
+  // Fund fee data counts as a source once it has entries
+  const fees: [string, Entry][] = FUND_FEES.length
+    ? [['data/fund-fees.json', { title: `Fund fees for the platform comparison (${FUND_FEES.length} funds)`, url: 'https://disclose-register.companiesoffice.govt.nz', publisher: 'Fund updates, Disclose Register', licence: 'own-content', country: 'NZ', asOf: FUND_FEES_AS_OF, reviewEveryMonths: FUND_FEES_REVIEW_MONTHS }]]
+    : [];
+  return [...Object.entries(manifest as Record<string, Entry>), ...fees]
     .filter(([path, e]) => !path.startsWith('_') && e.licence !== 'personal-study-only')
     .map(([path, e]) => {
       const every = e.reviewEveryMonths ?? 12;

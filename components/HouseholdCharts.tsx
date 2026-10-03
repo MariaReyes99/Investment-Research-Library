@@ -183,6 +183,46 @@ export function HouseholdWarnings({ result }: { result: HouseholdResult }) {
 }
 
 
+const MIX_COLORS = ['#53634f', '#c77957', '#4f7fa8', '#b58a1e', '#8a6aa8', '#5f9e8f', '#9a9a8a'];
+
+/** One horizontal bar split into labelled slices. */
+function MixBar({ title, slices, money }: { title: string; slices: HouseholdAnalysis['mix']['byAsset']; money: (n: number) => string }) {
+  if (!slices.length) return null;
+  return (
+    <div className="mix-row">
+      <p className="mix-title">{title}</p>
+      <div className="mix-bar" role="img" aria-label={`${title}: ${slices.map((s) => `${s.label} ${Math.round(s.share * 100)}%`).join(', ')}`}>
+        {slices.map((s, i) => <span key={s.label} style={{ width: `${s.share * 100}%`, background: MIX_COLORS[i % MIX_COLORS.length] }} title={`${s.label}: ${money(s.value)}`} />)}
+      </div>
+      <ul className="mix-legend">
+        {slices.map((s, i) => (
+          <li key={s.label}><i style={{ background: MIX_COLORS[i % MIX_COLORS.length] }} />{s.label} <b>{Math.round(s.share * 100)}%</b> <small>{money(s.value)}</small></li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** What the household owns, three ways, from the figures entered. */
+export function PortfolioMixView({ mix, country }: { mix: HouseholdAnalysis['mix']; country: CountryCode }) {
+  const money = moneyFor(country);
+  if (!mix.byAsset.length) return null;
+  return (
+    <div className="portfolio-mix">
+      <h3>Your portfolio mix</h3>
+      <MixBar title="What you own" slices={mix.byAsset} money={money} />
+      <MixBar title="Your investments by type" slices={mix.byInvestmentType} money={money} />
+      <MixBar title="Growth or defensive (estimated)" slices={mix.growthDefensive} money={money} />
+      <MixBar title="By currency" slices={mix.byCurrency} money={money} />
+      <p className="asset-editor-note">
+        {mix.feesPerYear > 0 && <>Your investments cost about <b>{money(mix.feesPerYear)}</b> a year in fees at today&apos;s balances. </>}
+        Growth or defensive is estimated from each investment&apos;s type and expected growth. This looks at what you entered;
+        it doesn&apos;t look inside each fund at its holdings, sectors or regions (that needs licensed fund data). Your fund&apos;s fact sheet shows its actual mix.
+      </p>
+    </div>
+  );
+}
+
 /** Strengths, weaknesses, risks and measured levers. Education, not recommendations. */
 export function HouseholdAnalysisView({ analysis, country }: { analysis: HouseholdAnalysis; country: CountryCode }) {
   const money = moneyFor(country);
@@ -196,6 +236,7 @@ export function HouseholdAnalysisView({ analysis, country }: { analysis: Househo
   return (
     <section className="portfolio-analysis" aria-labelledby="analysis-title">
       <h2 id="analysis-title">Portfolio analysis</h2>
+      {analysis.mix && <PortfolioMixView mix={analysis.mix} country={country} />}
       <div className="analysis-groups">
         {groups.map(([title, tone, items]) => items.length ? (
           <div className={`analysis-group ${tone}`} key={title}>

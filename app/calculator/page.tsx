@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import SiteHeader from '../../components/SiteHeader';
 import ProjectorShell from '../../components/ProjectorShell';
 import PlatformComparisonSection from '../../components/PlatformComparisonSection';
+import TrustedTools from '../../components/TrustedTools';
 
 export const metadata: Metadata = {
   title: 'Wealth projector · Investment Research Library',
@@ -22,6 +23,7 @@ export default function CalculatorPage() {
         <p><a className="guide-link" href="/calculator/guide">Need help? Read the step-by-step guide →</a></p>
         <ProjectorShell />
         <PlatformComparisonSection />
+        <TrustedTools />
       </main>
     </div>
   );

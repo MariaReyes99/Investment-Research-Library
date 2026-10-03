@@ -18,7 +18,7 @@ import { collectionLabel } from '../lib/collections';
 import { projectWealth, type ProjectionInput } from '../lib/finance/projections';
 import { householdFromSimple } from '../lib/finance/fromSimple';
 import { BasisLabel, CountrySelect, RetireInSelect, useCountry, useRetireIn } from '../components/CountryPicker';
-import { COUNTRIES, disclaimerFor, isCountry, questionHint, type CountryCode } from '../lib/countries';
+import { COUNTRIES, disclaimerFor, isCountry, localTerms, questionHint, type CountryCode } from '../lib/countries';
 import { safeHttpUrl } from '../lib/security';
 
 type Source = {
@@ -369,7 +369,7 @@ export default function Page() {
                   </label>
                   <small>
                     {includePlan
-                      ? `Your ${projectorPlan.source === 'full' ? '"All details"' : 'guided'} plan is sent with each question while this is on. Names, IRD and bank numbers are removed first.`
+                      ? `Your ${projectorPlan.source === 'full' ? '"Advanced"' : 'guided'} plan is sent with each question while this is on. Names, tax numbers and bank numbers are removed first.`
                       : 'Off: your plan stays on this device.'}
                   </small>
                   {includePlan && (
@@ -409,7 +409,7 @@ export default function Page() {
               </button>
             </form>
             <p className="composer-note">
-              Age and amounts are enough; don&apos;t include names, IRD numbers or bank details <span>·</span> education, not financial advice
+              Age and amounts are enough; don&apos;t include names, {localTerms(country).taxNumber} or bank details <span>·</span> education, not financial advice
             </p>
           </div>
         </div>

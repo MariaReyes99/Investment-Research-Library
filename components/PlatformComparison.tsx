@@ -8,6 +8,7 @@ import {
 import { comparePlatforms, type PlatformComparisonInput } from '../lib/finance/platform-comparison';
 import { moneyFor, COUNTRIES } from '../lib/countries';
 import { useCountry } from './CountryPicker';
+import { FEE_LOOKUPS, FUND_FEES } from '../lib/fundFees';
 
 type OptionDraft = {
   id: string;
@@ -151,6 +152,25 @@ export default function PlatformComparison() {
                 <input id={`${option.id}-name`} value={option.name} maxLength={80} placeholder="Name of the platform or fund"
                   onChange={(event) => updateOption(option.id, { name: event.target.value })} />
               </label>
+              {FUND_FEES.length > 0 && (
+                <label className="comparison-field" htmlFor={`${option.id}-fund`}>
+                  <span>Fill in from a fund</span>
+                  <select id={`${option.id}-fund`} className="planner-select" defaultValue=""
+                    onChange={(event) => {
+                      const f = FUND_FEES.find((x) => `${x.provider}|${x.name}` === event.target.value);
+                      if (f) updateOption(option.id, { name: `${f.provider} ${f.name}`, annualFeePct: f.annualFeePct, monthlyAccountFee: f.monthlyAccountFee ?? 0 });
+                    }}>
+                    <option value="" disabled>Choose a fund…</option>
+                    {FUND_FEES.map((f) => <option key={`${f.provider}|${f.name}`} value={`${f.provider}|${f.name}`}>{f.provider}: {f.name} ({f.annualFeePct}% a year, as at {f.asOf})</option>)}
+                  </select>
+                </label>
+              )}
+              <p className="comparison-lookup">
+                Find this fund&apos;s fees:{' '}
+                {(FEE_LOOKUPS[country] ?? []).map((l, i) => (
+                  <span key={l.url}>{i > 0 && ' · '}<a href={l.url} target="_blank" rel="noopener noreferrer">{l.label} ↗</a></span>
+                ))}
+              </p>
               <div className="comparison-fees-grid">
                 <ComparisonInput id={`${option.id}-return`} label="Gross return" value={option.expectedReturnPct} step={0.25} unit="% / year"
                   onChange={(value) => updateOption(option.id, { expectedReturnPct: value })} />

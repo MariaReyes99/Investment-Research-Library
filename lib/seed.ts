@@ -338,10 +338,17 @@ async function main() {
 }
 
 main().catch((error: unknown) => {
-  const statusCode =
-    typeof error === 'object' && error !== null && 'statusCode' in error ? error.statusCode : undefined;
-  if (typeof statusCode === 'number') {
-    console.error(`Seeding failed with HTTP ${statusCode}. Check your API key and OPENAI_BASE_URL.`);
+  const e = (typeof error === 'object' && error !== null ? error : {}) as { statusCode?: number; responseBody?: string; message?: string; url?: string };
+  if (typeof e.statusCode === 'number') {
+    // Show what the server actually said, so the cause is clear (never print the key itself)
+    let reason = e.message ?? '';
+    try { reason = JSON.parse(e.responseBody ?? '').error?.message ?? reason; } catch { /* not JSON */ }
+    const key = process.env.OPENAI_API_KEY ?? '';
+    console.error(`Seeding failed with HTTP ${e.statusCode}: ${reason}`);
+    console.error(`  Server:          ${process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1 (default)'}`);
+    console.error(`  Embedding model: ${process.env.EMBEDDING_MODEL ?? 'text-embedding-3-small (default)'}`);
+    console.error(`  API key starts:  ${key ? `${key.slice(0, 7)}…` : '(missing)'}`);
+    console.error('  Check these three lines in .env.local. With your own OpenAI key, remove OPENAI_BASE_URL and use EMBEDDING_MODEL=text-embedding-3-small.');
   } else if (error instanceof Error) {
     console.error(error.message);
   } else {

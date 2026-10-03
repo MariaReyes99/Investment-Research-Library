@@ -161,3 +161,45 @@ export function questionHint(code: CountryCode | undefined): string {
     PH: 'Ask about funds, PERA, SSS or your retirement numbers…',
   }[code ?? DEFAULT_COUNTRY];
 }
+
+/** Everyday money words that differ between countries, for labels and hints. */
+export interface LocalTerms {
+  termDeposit: string;
+  shares: string;
+  propertyTax: string;
+  everydayAccount: string;
+  taxNumber: string;
+  inflationTarget: string;
+  /** How investment returns are usually taxed, in plain words. */
+  investmentTax: string;
+}
+
+export function localTerms(code: CountryCode | undefined): LocalTerms {
+  return {
+    NZ: {
+      termDeposit: 'Term deposit', shares: 'Shares', propertyTax: 'rates', everydayAccount: 'everyday account', taxNumber: 'IRD numbers',
+      inflationTarget: 'The Reserve Bank of New Zealand aims to keep inflation between 1% and 3%.',
+      investmentTax: 'KiwiSaver and most managed funds are PIEs, taxed at your PIR of 10.5%, 17.5% or 28%.',
+    },
+    AU: {
+      termDeposit: 'Term deposit', shares: 'Shares', propertyTax: 'council rates', everydayAccount: 'everyday account', taxNumber: 'tax file numbers',
+      inflationTarget: 'The Reserve Bank of Australia aims to keep inflation between 2% and 3%.',
+      investmentTax: 'Super fund earnings are generally taxed at up to 15% while you are saving.',
+    },
+    US: {
+      termDeposit: 'CD (certificate of deposit)', shares: 'Stocks', propertyTax: 'property taxes', everydayAccount: 'checking account', taxNumber: 'Social Security numbers',
+      inflationTarget: 'The Federal Reserve aims for inflation of about 2% over time.',
+      investmentTax: 'Traditional 401(k) and IRA withdrawals are taxed as income; Roth withdrawals usually are not.',
+    },
+    UK: {
+      termDeposit: 'Fixed-rate savings bond', shares: 'Shares', propertyTax: 'council tax', everydayAccount: 'current account', taxNumber: 'National Insurance numbers',
+      inflationTarget: 'The Bank of England aims for inflation of 2%.',
+      investmentTax: 'ISAs are tax-free; pension withdrawals beyond the tax-free part are taxed as income.',
+    },
+    PH: {
+      termDeposit: 'Time deposit', shares: 'Stocks', propertyTax: 'real property tax', everydayAccount: 'savings or current account', taxNumber: 'TINs',
+      inflationTarget: 'Bangko Sentral ng Pilipinas aims to keep inflation between 2% and 4%.',
+      investmentTax: 'Interest on bank deposits is generally subject to a 20% final tax.',
+    },
+  }[code ?? DEFAULT_COUNTRY];
+}
