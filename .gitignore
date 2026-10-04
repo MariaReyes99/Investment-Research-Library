@@ -15,3 +15,9 @@ node_modules
 .env*
 
 *.zip
+
+# Never upload these
+*recovery*
+*Backup Code*
+.env*
+!.env.example
