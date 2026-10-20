@@ -44,7 +44,7 @@ export default function UpgradePanel({ tier }: { tier: LimitTier }) {
           </SignInButton>
         )}
         <PlanChoices signedIn={false} />
-        <small>The wealth projector stays free and works without an account. <Link href="/calculator">Open the projector</Link></small>
+        <small>The wealth projector stays free and works without an account. <Link href="/?tab=numbers">Open the projector</Link></small>
       </section>
     );
   }

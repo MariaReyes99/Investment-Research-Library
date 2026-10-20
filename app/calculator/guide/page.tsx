@@ -10,7 +10,7 @@ export default function ProjectorGuidePage() {
     <div className="page-shell">
       <SiteHeader current="calculator" />
       <main className="page-main prose-page guide-page">
-        <p className="guide-back"><Link href="/calculator">← Back to the wealth projector</Link></p>
+        <p className="guide-back"><Link href="/?tab=numbers">← Back to My numbers</Link></p>
         <h1 className="page-title">How to fill in the wealth projector</h1>
         <p className="page-lede">
           Work down the form from top to bottom. You don&apos;t need every section: leave out anything that doesn&apos;t apply,

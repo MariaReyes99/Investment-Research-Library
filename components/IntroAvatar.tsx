@@ -272,7 +272,7 @@ export default function IntroAvatar() {
                 {last && (
                   <div className="intro-cta">
                     <p className="intro-positioning">{POSITIONING}</p>
-                    <Link className="wizard-button" href="/calculator" onClick={close}>Start the guided setup</Link>
+                    <Link className="wizard-button" href="/?tab=numbers" onClick={close}>Start the guided setup</Link>
                     <Link className="wizard-button is-quiet" href="/" onClick={close}>Ask the library</Link>
                   </div>
                 )}

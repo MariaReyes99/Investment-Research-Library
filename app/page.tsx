@@ -13,13 +13,29 @@ import { HouseholdAnalysisView, HouseholdChart, HouseholdComparison, HouseholdMi
 import { analyseHousehold } from '../lib/finance/householdAnalysis';
 import UpgradePanel, { type LimitTier } from '../components/UpgradePanel';
 import { projectHousehold, type HouseholdInput } from '../lib/finance/household';
-import { projectorLink } from '../lib/finance/householdLink';
+import { openPlanLink, projectorLink } from '../lib/finance/householdLink';
 import { collectionLabel } from '../lib/collections';
 import { projectWealth, type ProjectionInput } from '../lib/finance/projections';
 import { householdFromSimple } from '../lib/finance/fromSimple';
 import { BasisLabel, CountrySelect, RetireInSelect, useCountry, useRetireIn } from '../components/CountryPicker';
 import { COUNTRIES, disclaimerFor, isCountry, localTerms, questionHint, type CountryCode } from '../lib/countries';
 import { safeHttpUrl } from '../lib/security';
+import ProjectorShell from '../components/ProjectorShell';
+import PlatformComparisonSection from '../components/PlatformComparisonSection';
+import TrustedTools from '../components/TrustedTools';
+import { useComparisonSummary } from '../lib/comparisonShare';
+
+type Tab = 'ask' | 'numbers';
+const INCLUDE_KEY = 'irl:include-plan';
+
+/** Questions people ask once their numbers are in. */
+const NUMBER_QUESTIONS = [
+  'What do my numbers mean, in plain words?',
+  'Where could I improve my plan to retire comfortably?',
+  'Am I on track compared with the 4% rule?',
+  'Should I stay with my KiwiSaver or super provider, or move? Explain the fee and tax differences.',
+  'What are the biggest risks in my plan, and how could we reduce them as a couple?',
+];
 
 type Source = {
   text?: string; source?: string; document?: string; section?: string;
@@ -82,7 +98,7 @@ const ProjectionFromArgs = memo(function ProjectionFromArgs({ args, country: sel
       <MilestoneTable result={data.result} country={country} />
       <HouseholdAnalysisView analysis={data.analysis} country={country} />
       <p className="projection-note">
-        <a href={projectorLink(data.household)}>Open these numbers in the wealth projector</a> to add income, property,
+        <a href={projectorLink(data.household)} onClick={(e) => { e.preventDefault(); openPlanLink(projectorLink(data.household)); }}>Open these numbers in My numbers</a> to add income, property,
         pensions and more, privately on your device.
       </p>
     </details>
@@ -111,7 +127,7 @@ const HouseholdFromArgs = memo(function HouseholdFromArgs({ args }: { args: unkn
       <HouseholdComparison result={result} />
       <HouseholdAnalysisView analysis={analysis} country={result.inputs.country} />
       <p className="projection-note">
-        <a href={projectorLink(args as HouseholdInput)}>Open these numbers in the wealth projector</a> to change them privately on your device.
+        <a href={projectorLink(args as HouseholdInput)} onClick={(e) => { e.preventDefault(); openPlanLink(projectorLink(args as HouseholdInput)); }}>Open these numbers in My numbers</a> to change them privately on your device.
       </p>
     </details>
   );
@@ -131,8 +147,44 @@ export default function Page() {
   const [retireIn, setRetireIn] = useRetireIn();
   // The plan from the wealth projector, sent only while "Include my plan" is on
   const projectorPlan = useProjectorPlan(country);
-  const [includePlan, setIncludePlan] = useState(false);
+  // On by default: the projector on this page is linked to the library automatically. People can switch it off.
+  const [includePlan, setIncludePlanState] = useState(true);
+  useEffect(() => {
+    try { if (window.localStorage.getItem(INCLUDE_KEY) === 'off') setIncludePlanState(false); } catch { /* ignore */ }
+  }, []);
+  const setIncludePlan = (on: boolean) => {
+    setIncludePlanState(on);
+    try { window.localStorage.setItem(INCLUDE_KEY, on ? 'on' : 'off'); } catch { /* ignore */ }
+  };
   const sharePlan = includePlan && projectorPlan ? projectorPlan.plan : undefined;
+  const comparisonSummary = useComparisonSummary();
+  const shareComparison = includePlan && comparisonSummary ? comparisonSummary : undefined;
+  const [tab, setTab] = useState<Tab>('ask');
+  const [numbersOpened, setNumbersOpened] = useState(false);
+  const [projectorKey, setProjectorKey] = useState(0);
+  // A projection in a chat answer was opened: show it in "My numbers" without leaving the page
+  useEffect(() => {
+    const open = () => { setTab('numbers'); setNumbersOpened(true); setProjectorKey((k) => k + 1); window.scrollTo({ top: 0 }); };
+    window.addEventListener('irl:open-plan', open);
+    return () => window.removeEventListener('irl:open-plan', open);
+  }, []);
+  const openTab = (t: Tab) => {
+    setTab(t);
+    if (t === 'numbers') setNumbersOpened(true);
+    const url = new URL(window.location.href);
+    if (t === 'numbers') url.searchParams.set('tab', 'numbers'); else { url.searchParams.delete('tab'); url.searchParams.delete('view'); }
+    window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+    window.scrollTo({ top: 0 });
+  };
+  // Open "My numbers" when arriving from an old /calculator link or a "plan" link
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('tab') === 'numbers' || params.get('view') === 'full' || window.location.hash.startsWith('#plan=')) {
+      setTab('numbers');
+      setNumbersOpened(true);
+    }
+  }, []);
+
   const [privacyNotice, setPrivacyNotice] = useState<string | null>(null);
   const [remaining, setRemaining] = useState<number | null>(null);
   const [answerHeld, setAnswerHeld] = useState(false);
@@ -153,7 +205,7 @@ export default function Page() {
 
   const { messages, input, setInput, setMessages, handleInputChange, handleSubmit, status, error } = useChat({
     api: '/api/chat',
-    body: { country, retireIn: retireIn && retireIn !== country ? retireIn : undefined, plan: sharePlan },
+    body: { country, retireIn: retireIn && retireIn !== country ? retireIn : undefined, plan: sharePlan, comparison: shareComparison },
     onResponse: (res) => {
       const notice = res.headers.get('X-Privacy-Notice');
       setPrivacyNotice(notice ? decodeURIComponent(notice) : null);
@@ -166,6 +218,7 @@ export default function Page() {
       setAnswerHeld(res.headers.get('X-Answer-Check') === 'held');
     },
   });
+  const askAbout = (q: string) => { openTab('ask'); setInput(q); };
   const isBusy = status === 'streaming' || status === 'submitted';
   const limitReached = limitTier !== null;
   const left = remaining ?? usage?.remaining ?? null;
@@ -199,14 +252,14 @@ export default function Page() {
 
         <div className="rail-section">
           <p className="rail-label">TOOLS</p>
-          <Link className="corpus-entry corpus-button" href="/calculator">
+          <button type="button" className="corpus-entry corpus-button" onClick={() => openTab(tab === 'numbers' ? 'ask' : 'numbers')}>
             <span className="corpus-glyph" aria-hidden="true">$</span>
             <span>
-              <strong>Wealth projector</strong>
-              <small>Private, runs on your device</small>
+              <strong>{tab === 'numbers' ? 'Back to the library' : 'My numbers'}</strong>
+              <small>{tab === 'numbers' ? 'Ask about your plan' : 'Wealth projector and fund comparison'}</small>
             </span>
             <span className="ready-dot" aria-hidden="true" />
-          </Link>
+          </button>
         </div>
 
         <div className="rail-section rail-country">
@@ -217,7 +270,7 @@ export default function Page() {
         <div className="rail-section recent-section">
           <p className="rail-label">EXPLORE</p>
           {TOPICS.map(([label, question]) => (
-            <button className="rail-link" key={label} type="button" onClick={() => setInput(question)}>
+            <button className="rail-link" key={label} type="button" onClick={() => askAbout(question)}>
               {label}
             </button>
           ))}
@@ -233,7 +286,7 @@ export default function Page() {
 
       <section className="guide-workspace" id="top">
         <header className="workspace-bar">
-          <SiteNav current="ask" />
+          <SiteNav current={tab === 'numbers' ? 'calculator' : 'ask'} onTab={openTab} />
           <div className="source-count">
             <span className="ready-dot" /> <span className="usage-meter">{usageLabel}</span>
           </div>
@@ -244,7 +297,38 @@ export default function Page() {
           <RetireInSelect id="chat-retire-in-mobile" value={retireIn && retireIn !== country ? retireIn : null} livesIn={country} onChange={setRetireIn} />
         </div>
 
-        <div className="conversation-column">
+        <div className="workspace-tabs" role="tablist" aria-label="Library or my numbers">
+          <button type="button" role="tab" aria-selected={tab === 'ask'} className={tab === 'ask' ? 'is-on' : ''} onClick={() => openTab('ask')}>
+            💬 Ask the library {includePlan && (projectorPlan || comparisonSummary) && <small>· linked to my numbers</small>}
+          </button>
+          <button type="button" role="tab" aria-selected={tab === 'numbers'} className={tab === 'numbers' ? 'is-on' : ''} onClick={() => openTab('numbers')}>
+            📊 My numbers <small>· wealth projector and fund comparison</small>
+          </button>
+        </div>
+
+        {numbersOpened && (
+          <div className="numbers-panel" hidden={tab !== 'numbers'}>
+            <h1 className="page-title">My numbers</h1>
+            <p className="page-lede">
+              See where your money could take you, on your own or as a couple. Your answers stay on this device; while
+              &quot;Include my numbers&quot; is on, the library uses them to explain what they mean and how you could improve them.
+            </p>
+            <div className="ask-about-numbers">
+              <strong>Ask the library about these numbers:</strong>
+              {NUMBER_QUESTIONS.map((q) => <button key={q} type="button" className="suggestion-chip" onClick={() => askAbout(q)}>{q}</button>)}
+            </div>
+            <p><a className="guide-link" href="/calculator/guide">Need help? Read the step-by-step guide →</a></p>
+            <ProjectorShell key={projectorKey} />
+            <PlatformComparisonSection />
+            <TrustedTools />
+            <div className="ask-about-numbers">
+              <strong>Questions about your plan or the comparison?</strong>
+              <button type="button" className="suggestion-chip" onClick={() => openTab('ask')}>Ask the library ↗</button>
+            </div>
+          </div>
+        )}
+
+        <div className="conversation-column" hidden={tab !== 'ask'}>
           {messages.length === 0 ? (
             <section className="welcome-panel" aria-labelledby="welcome-title">
               <div className="welcome-seal" aria-hidden="true"><span>RL</span></div>
@@ -359,25 +443,26 @@ export default function Page() {
           {limitTier && <UpgradePanel tier={limitTier} />}
 
           <div className="composer-wrap">
-            <div className={`plan-share${includePlan && projectorPlan ? ' is-on' : ''}`}>
-              {projectorPlan ? (
+            <div className={`plan-share${includePlan && (projectorPlan || comparisonSummary) ? ' is-on' : ''}`}>
+              {projectorPlan || comparisonSummary ? (
                 <>
                   <label className="plan-share-toggle">
                     <input type="checkbox" role="switch" checked={includePlan} onChange={(ev) => setIncludePlan(ev.target.checked)} />
                     <span className="plan-share-track" aria-hidden="true"><span /></span>
-                    <span>📎 Include my wealth projector plan</span>
+                    <span>📎 Include my numbers (projector plan{comparisonSummary ? ' and fund comparison' : ''})</span>
                   </label>
                   <small>
                     {includePlan
-                      ? `Your ${projectorPlan.source === 'full' ? '"Advanced"' : 'guided'} plan is sent with each question while this is on. Names, tax numbers and bank numbers are removed first.`
-                      : 'Off: your plan stays on this device.'}
+                      ? `Linked: ${projectorPlan ? `your ${projectorPlan.source === 'full' ? '"Advanced"' : 'guided'} plan` : ''}${projectorPlan && comparisonSummary ? ' and ' : ''}${comparisonSummary ? 'your fund comparison' : ''} ${projectorPlan && comparisonSummary ? 'are' : 'is'} sent with each question while this is on. Names, tax numbers and bank numbers are removed first.`
+                      : 'Off: your numbers stay on this device.'}
                   </small>
                   {includePlan && (
                     <div className="plan-share-ideas">
                       {[
-                        'Review my plan against well-known investing principles',
+                        'What do my numbers mean, in plain words?',
                         'Where could I improve my plan?',
-                        "Which country's rules apply to each of my investments?",
+                        'Review my plan against well-known investing principles',
+                        ...(comparisonSummary ? ['Should I stay with my current fund or move?'] : []),
                       ].map((q) => (
                         <button key={q} type="button" className="suggestion-chip" onClick={() => setInput(q)}>{q}</button>
                       ))}
@@ -385,7 +470,7 @@ export default function Page() {
                   )}
                 </>
               ) : (
-                <small>Want answers about your own numbers? <Link href="/calculator">Fill in the wealth projector</Link>, then switch on &quot;Include my plan&quot; here.</small>
+                <small>Want answers about your own numbers? <button type="button" className="link-button" onClick={() => openTab('numbers')}>Fill in My numbers</button> and the library will use them automatically.</small>
               )}
             </div>
             {privacyNotice && (

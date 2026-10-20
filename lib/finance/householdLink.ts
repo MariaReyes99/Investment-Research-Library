@@ -17,8 +17,20 @@ function fromBase64Url(text: string) {
   return new TextDecoder().decode(Uint8Array.from(binary, (c) => c.charCodeAt(0)));
 }
 
+/** The projector now lives on the library page, in the "My numbers" tab, "Advanced" view. */
 export function projectorLink(input: HouseholdInput) {
-  return `/calculator#plan=${toBase64Url(JSON.stringify(input))}`;
+  return `/?tab=numbers&view=full#plan=${toBase64Url(JSON.stringify(input))}`;
+}
+
+/** Opens a plan link. On the library page it switches tabs without reloading (so the chat stays). */
+export function openPlanLink(href: string) {
+  if (typeof window === 'undefined') return;
+  if (window.location.pathname === '/') {
+    window.history.replaceState(null, '', href);
+    window.dispatchEvent(new Event('irl:open-plan'));
+  } else {
+    window.location.assign(href);
+  }
 }
 
 /** Reads a plan from location.hash. Returns null if there isn't a valid one. */
