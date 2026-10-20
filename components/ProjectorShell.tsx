@@ -12,6 +12,13 @@ import { projectorLink } from '../lib/finance/householdLink';
 
 type View = 'guided' | 'full';
 
+/** The current query string with view set (or removed for the guided view), keeping other settings such as the tab. */
+function withView(v: View) {
+  const p = new URLSearchParams(window.location.search);
+  if (v === 'full') p.set('view', 'full'); else p.delete('view');
+  return p.toString();
+}
+
 export default function ProjectorShell() {
   const [view, setView] = useState<View>('guided');
   const guidedPlan = useRef<HouseholdInput | null>(null);
@@ -28,9 +35,9 @@ export default function ProjectorShell() {
     if (v === 'full' && guidedPlan.current) {
       // Hand the guided answers to "Advanced" (it reads them from the address, on this device only)
       const hash = projectorLink(guidedPlan.current).split('#')[1];
-      window.history.replaceState(null, '', `/calculator?view=full#${hash}`);
+      window.history.replaceState(null, '', `${window.location.pathname}?${withView('full')}#${hash}`);
     } else {
-      window.history.replaceState(null, '', v === 'full' ? '/calculator?view=full' : '/calculator');
+      window.history.replaceState(null, '', `${window.location.pathname}?${withView(v)}`);
     }
     setView(v);
   };

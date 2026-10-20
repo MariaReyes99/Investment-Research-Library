@@ -40,7 +40,9 @@ export function useProjectorPlan(country: CountryCode): ProjectorPlan | null {
     window.addEventListener('focus', refresh);
     window.addEventListener('storage', refresh);
     window.addEventListener('irl:saved-plans-cleared', refresh);
+    window.addEventListener('irl:plan-updated', refresh);
     return () => {
+      window.removeEventListener('irl:plan-updated', refresh);
       window.removeEventListener('focus', refresh);
       window.removeEventListener('storage', refresh);
       window.removeEventListener('irl:saved-plans-cleared', refresh);

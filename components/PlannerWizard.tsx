@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { CURRENCIES, projectHousehold, usedCurrencies, type Currency, type HouseholdInput } from '../lib/finance/household';
 import { analyseHousehold } from '../lib/finance/householdAnalysis';
-import { projectorLink } from '../lib/finance/householdLink';
+import { openPlanLink, projectorLink } from '../lib/finance/householdLink';
 import { COUNTRIES, COUNTRY_CODES, localTerms, moneyFor, profile, retirementSavingsLabel, type CountryCode } from '../lib/countries';
 import { HINTS, feesHint, growthHint, inflationHint } from '../lib/fieldGuide';
 import { BasisLabel, CountrySelect, RetireInSelect, useCountry, useRetireIn } from './CountryPicker';
@@ -85,6 +85,7 @@ function saveGuided(a: Answers, step: number, base: Base | null) {
     if (a === START && step === 0) window.localStorage.removeItem(GUIDED_KEY);
     else window.localStorage.setItem(GUIDED_KEY, JSON.stringify({ a, step, base: base ?? undefined, at: Date.now() }));
   } catch { /* private browsing: answers last for this visit only */ }
+  window.dispatchEvent(new Event('irl:plan-updated'));
 }
 /** The "Advanced" plan, if it was changed more recently than the guided answers. */
 function newerFullPlan(guidedAt: number): HouseholdInput | null {
@@ -395,7 +396,7 @@ function CurrencyPick({ id, label, value, home, onChange }: { id: string; label:
 
 /** Opens a plan in the "Advanced" view. */
 export function openInAllDetails(plan: HouseholdInput) {
-  window.location.assign(projectorLink(plan).replace('/calculator#', '/calculator?view=full#'));
+  openPlanLink(projectorLink(plan));
 }
 
 export default function PlannerWizard({ onPlanChange }: { onPlanChange?: (plan: HouseholdInput | null) => void }) {

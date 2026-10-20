@@ -137,7 +137,7 @@ test('household: comparison rows and goal are reported', () => {
 
 test('household: plan link round-trips through the URL fragment', () => {
   const link = projectorLink(EXAMPLE);
-  assert.ok(link.startsWith('/calculator#plan='));
+  assert.ok(link.startsWith('/?tab=numbers&view=full#plan='));
   const back = planFromHash(link.slice(link.indexOf('#')));
   assert.equal(back?.investments?.length, 4);
   assert.equal(planFromHash('#plan=not-valid'), null);

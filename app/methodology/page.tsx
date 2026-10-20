@@ -13,7 +13,7 @@ export default function MethodologyPage() {
   return (
     <div className="page-shell">
       <SiteHeader current="methodology" />
-      <main className="page-main prose-page">
+      <main id="main-content" tabIndex={-1} className="page-main prose-page">
         <h1 className="page-title">How the library works</h1>
         <p className="page-lede">
           What the answers are based on, how the wealth projector calculates, and what it leaves out.

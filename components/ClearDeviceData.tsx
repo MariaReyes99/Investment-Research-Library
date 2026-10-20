@@ -5,11 +5,15 @@
  */
 import { useState } from 'react';
 
-const KEYS = ['irl:saved-plans', 'irl:country', 'irl:retire-in', 'irl:guided', 'irl:full-plan'];
+import { clearSavedComparison } from '../lib/comparisonShare';
+
+const KEYS = ['irl:saved-plans', 'irl:country', 'irl:retire-in', 'irl:guided', 'irl:full-plan', 'irl:full-plan-at', 'irl:include-plan'];
 
 export function clearDeviceData(): boolean {
   try {
     for (const k of KEYS) window.localStorage.removeItem(k);
+    clearSavedComparison();
+    window.dispatchEvent(new Event('irl:plan-updated'));
     window.dispatchEvent(new Event('irl:country-change'));
     window.dispatchEvent(new Event('irl:retire-in-change'));
     window.dispatchEvent(new Event('irl:saved-plans-cleared'));

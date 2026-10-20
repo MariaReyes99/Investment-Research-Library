@@ -18,7 +18,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
   return (
     <div className="page-shell">
       <SiteHeader current="pricing" />
-      <main className="page-main">
+      <main id="main-content" tabIndex={-1} className="page-main">
         <h1 className="page-title">Plans</h1>
         <p className="page-lede">
           Start free. Upgrade when you want more questions. Prices are in NZD per month including GST. Cancel at any time:

@@ -38,14 +38,14 @@ const SCENES: Scene[] = [
     points: ['Strengths and weaknesses', 'Risks to watch', 'Levers to explore', 'Emergency fund check'],
   },
   {
-    icon: '📚', title: 'Ask the library',
-    line: "Ask questions in plain words, and get answers with sources you can check. Switch on 'include my plan' to have your own numbers reviewed against well-known investing principles and your country's rules.",
-    points: ['Plain-English answers', 'Sources you can check', 'Reviews your own plan'],
+    icon: '📚', title: 'Ask about your financial numbers',
+    line: "The library and your financial numbers are on one page. Ask questions in plain words and get answers with sources you can check. The library sees your plan and your fund comparison, so it can explain your overall picture, the costs of reaching your money, and the tax rules across countries.",
+    points: ['Answers with sources', 'Your overall picture', 'Costs and cross-border tax'],
   },
   {
-    icon: '⚖️', title: 'Compare platforms and fees',
-    line: "See how fees add up over the years, side by side, and find free tools from trusted sources such as Sorted.",
-    points: ['Fees side by side', 'Named on the chart', 'Free trusted tools'],
+    icon: '⚖️', title: 'Retirement fund comparison', mood: 'point',
+    line: "Compare your KiwiSaver, super or pension in three simple steps: enter your details, choose the funds, then read the results. Hints under each box show where to find your numbers, or just type 'compare the top 3 providers in New Zealand'.",
+    points: ['1. Your details', '2. Choose funds', '3. Read the results', 'Hints under every box'],
   },
   {
     icon: '🔒', title: 'Private and safe',
@@ -272,7 +272,7 @@ export default function IntroAvatar() {
                 {last && (
                   <div className="intro-cta">
                     <p className="intro-positioning">{POSITIONING}</p>
-                    <Link className="wizard-button" href="/calculator" onClick={close}>Start the guided setup</Link>
+                    <Link className="wizard-button" href="/?tab=numbers" onClick={close}>Start the guided setup</Link>
                     <Link className="wizard-button is-quiet" href="/" onClick={close}>Ask the library</Link>
                   </div>
                 )}

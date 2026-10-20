@@ -22,7 +22,7 @@ const clerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 export default function AccountControls({ showProjector = false }: { showProjector?: boolean }) {
   return (
     <div className="account-controls">
-      {showProjector && <Link className="account-link only-mobile" href="/calculator">Projector</Link>}
+      {showProjector && <Link className="account-link only-mobile" href="/?tab=numbers">My financial numbers</Link>}
       <Link className="account-link" href="/pricing">Plans</Link>
       {clerkEnabled && <ClerkAccountControls />}
     </div>

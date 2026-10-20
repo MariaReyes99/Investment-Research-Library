@@ -370,6 +370,8 @@ export default function HouseholdPlanner() {
       // Lets the guided setup know this plan is the newest
       window.localStorage.setItem('irl:full-plan-at', String(Date.now()));
     } catch { /* private browsing */ }
+    // Lets the library on the same page pick up the new numbers straight away
+    window.dispatchEvent(new Event('irl:plan-updated'));
   }, [plan, restored]);
 
   // Follow the saved country of residence until the person starts editing.

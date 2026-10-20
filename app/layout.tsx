@@ -15,6 +15,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const page = (
     <html lang="en-NZ">
       <body>
+        <a className="skip-link" href="#main-content">Skip to main content</a>
         {children}
         <IntroAvatar />
       </body>
