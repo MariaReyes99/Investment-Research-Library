@@ -109,15 +109,43 @@ test('quarterly figures add up to the yearly ones', () => {
   assert.equal(f.quarterly[3].balance, f.yearly[0].balance);
 });
 
-test('balance = contributions after tax + government + net growth − contribution charges', () => {
+test('balance = contributions after tax and charges + government + net growth', () => {
   for (const c of ['NZ', 'AU', 'UK'] as const) {
     const input = base(c);
     input.options = [optionFromProvider(PROVIDERS[c][0], c, 'long-term', 'a')];
     const f = compareFunds(input).funds[0];
     const last = f.monthly[f.monthly.length - 1];
     const net = f.monthly.reduce((s, m) => s + m.netReturn, 0);
-    const expected = last.startingCapital + last.employeeNet + last.employerNet + last.government + net - f.totals.contributionCharges;
+    const expected = last.startingCapital + last.employeeNet + last.employerNet + last.governmentNet + net;
     assert.ok(Math.abs(expected - f.endBalance) < 1, `${c}: ${expected} vs ${f.endBalance}`);
     if (c === 'NZ') assert.ok(last.government > 0 && last.employerNet < last.employer);
   }
+});
+
+test('gross contributions + return − drag = balance, every period (charts A − B = C)', () => {
+  for (const c of ['NZ', 'AU', 'US', 'UK', 'PH'] as const) {
+    const input = base(c);
+    input.options = [optionFromProvider(PROVIDERS[c][0], c, 'historic', 'a')];
+    const f = compareFunds(input).funds[0];
+    let growth = 0, drag = 0, net = 0;
+    for (const p of f.yearly) {
+      growth += p.growth; drag += p.tax + p.adminFees + p.otherFees; net += p.netReturn;
+      const gross = p.startingCapital + p.employee + p.employer + p.government + growth;
+      assert.ok(Math.abs(gross - drag - p.balance) < 1, `${c} year ${p.period}: A−B`);
+      const netPaid = p.startingCapital + p.employeeNet + p.employerNet + p.governmentNet;
+      assert.ok(Math.abs(netPaid + net - p.balance) < 1, `${c} year ${p.period}: C`);
+    }
+  }
+});
+
+test('a bigger starting balance raises the balance and the return, not the contributions', () => {
+  const run = (start: number) => {
+    const input = { ...base('NZ'), startBalance: start };
+    input.options = [optionFromProvider(PROVIDERS.NZ[0], 'NZ', 'historic', 'a')];
+    return compareFunds(input).funds[0];
+  };
+  const a = run(50_000), b = run(90_000);
+  assert.ok(b.endBalance > a.endBalance + 40_000);
+  assert.ok(b.totals.growth > a.totals.growth);
+  assert.equal(Math.round(b.totals.employee), Math.round(a.totals.employee));
 });

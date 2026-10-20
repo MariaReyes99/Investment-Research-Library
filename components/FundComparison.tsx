@@ -137,15 +137,14 @@ const CHECKLIST: Record<CountryCode, string[]> = {
 
 function FundPanel({ fund, color, granularity, money, cur }: { fund: FundResult; color: string; granularity: Gran; money: (n: number) => string; cur: string }) {
   const data = useMemo(() => {
-    let net = 0, drag = 0, growth = 0, tax = 0, admin = 0, other = 0, prevGov = 0;
+    let net = 0, growth = 0, tax = 0, admin = 0, other = 0;
     return seriesOf(fund, granularity).map((p) => {
       net += p.netReturn; growth += p.growth; tax += p.tax; admin += p.adminFees; other += p.otherFees;
-      drag = tax + admin + other;
-      const gov = p.government - prevGov;
-      prevGov = p.government;
+      const grossPaidIn = p.startingCapital + p.employee + p.employer + p.government;
+      const netPaidIn = p.startingCapital + p.employeeNet + p.employerNet + p.governmentNet;
       return {
-        ...p, gov, cumNet: net + p.government, cumInvestNet: net, cumDrag: drag, cumGrowth: growth, cumTax: tax, cumAdmin: admin, cumOther: other,
-        netPaidIn: p.startingCapital + p.employeeNet + p.employerNet + p.government,
+        ...p, cumGrowth: growth, cumNetReturn: net, cumTax: tax, cumAdmin: admin, cumOther: other, cumDrag: tax + admin + other,
+        grossPaidIn, netPaidIn, grossTotal: grossPaidIn + growth,
       };
     });
   }, [fund, granularity]);
@@ -159,86 +158,98 @@ function FundPanel({ fund, color, granularity, money, cur }: { fund: FundResult;
     <details className="fund-panel" style={{ '--option-color': color } as CSSProperties} open>
       <summary><span className="comparison-swatch" />{fund.name}</summary>
 
+      <p className="fc-flow">
+        <span className="fc-flow-box is-gross">A. Gross total {money(last.grossTotal)}</span>{' − '}
+        <span className="fc-flow-box is-drag">B. Drag {money(last.cumDrag)}</span>{' = '}
+        <span className="fc-flow-box is-net" style={{ '--option-color': color } as CSSProperties}>C. Your balance {money(last.balance)}</span>
+      </p>
       <div className="fund-charts">
         <div className="comparison-chart-wrap">
-          <div className="comparison-chart-heading"><h3>1. Projected total net growth</h3><span>after tax and fees{hasGov ? ', plus government contribution' : ''}: {cur} per {unit} (bars), running total (line)</span></div>
+          <div className="comparison-chart-heading"><h3>A. Gross: contributions + return, before drag</h3><span>{cur}, running totals (stacked)</span></div>
           <div className="fund-chart">
             <ResponsiveContainer>
-              <ComposedChart data={data} margin={{ top: 8, right: 4, bottom: 0, left: 0 }}>
+              <ComposedChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                 <CartesianGrid stroke="#e1e8e5" vertical={false} />
                 <XAxis dataKey="period" {...axis} tick={{ fontSize: 10, fill: '#637275' }} />
-                <YAxis yAxisId="p" tickFormatter={compact} width={46} tick={{ fontSize: 10, fill: '#637275' }} />
-                <YAxis yAxisId="c" orientation="right" tickFormatter={compact} width={46} tick={{ fontSize: 10, fill: '#637275' }} />
+                <YAxis tickFormatter={compact} width={50} tick={{ fontSize: 10, fill: '#637275' }} />
                 <Tooltip formatter={(v, n) => [money(Number(v)), String(n)]} labelFormatter={label} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar yAxisId="p" stackId="net" dataKey="netReturn" name={`Investment growth after tax and fees`} fill={color} fillOpacity={0.55} isAnimationActive={false} />
-                {hasGov && <Bar yAxisId="p" stackId="net" dataKey="gov" name="Government contribution" fill="#8b85c9" isAnimationActive={false} />}
-                <Line yAxisId="c" type="monotone" dataKey="cumNet" name="Total net growth so far" stroke={color} strokeWidth={2.4} dot={false} isAnimationActive={false} />
+                <Area type="monotone" stackId="g" dataKey="startingCapital" name="Starting balance" fill="#c9d6d3" stroke="#9fb3ae" isAnimationActive={false} />
+                <Area type="monotone" stackId="g" dataKey="employee" name="Your contributions" fill="#9ccfc9" stroke="#5aa69c" isAnimationActive={false} />
+                <Area type="monotone" stackId="g" dataKey="employer" name={t.contributionTax > 0 ? 'Employer (before tax)' : 'Employer contributions'} fill="#f0c58f" stroke="#c9934c" isAnimationActive={false} />
+                {hasGov && <Area type="monotone" stackId="g" dataKey="government" name="Government contribution" fill="#c7c3ef" stroke="#8b85c9" isAnimationActive={false} />}
+                <Area type="monotone" stackId="g" dataKey="cumGrowth" name="Return before tax and fees" fill="#7fbfb6" stroke="#087e8b" isAnimationActive={false} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
-          <p className="fc-chart-total">Total net growth: <strong>{money(last.cumNet)}</strong>{hasGov && <> (investments {money(last.cumInvestNet)} + government {money(last.government)})</>}</p>
+          <p className="fc-chart-total">
+            Paid in {money(last.grossPaidIn)} (start {money(last.startingCapital)} + you {money(last.employee)} + employer {money(last.employer)}{hasGov ? ` + government ${money(last.government)}` : ''})
+            {' '}+ return {money(last.cumGrowth)} = <strong>{money(last.grossTotal)}</strong>
+          </p>
         </div>
 
         <div className="comparison-chart-wrap">
-          <div className="comparison-chart-heading"><h3>2. Projected total drag</h3><span>tax and fees: {cur} per {unit} (bars), running total (line)</span></div>
+          <div className="comparison-chart-heading"><h3>B. Drag: tax and fees taken out</h3><span>{cur}, running totals (stacked)</span></div>
           <div className="fund-chart">
             <ResponsiveContainer>
-              <ComposedChart data={data} margin={{ top: 8, right: 4, bottom: 0, left: 0 }}>
+              <ComposedChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                 <CartesianGrid stroke="#e1e8e5" vertical={false} />
                 <XAxis dataKey="period" {...axis} tick={{ fontSize: 10, fill: '#637275' }} />
-                <YAxis yAxisId="p" tickFormatter={compact} width={46} tick={{ fontSize: 10, fill: '#637275' }} />
-                <YAxis yAxisId="c" orientation="right" tickFormatter={compact} width={46} tick={{ fontSize: 10, fill: '#637275' }} />
+                <YAxis tickFormatter={compact} width={50} tick={{ fontSize: 10, fill: '#637275' }} />
                 <Tooltip formatter={(v, n) => [money(Number(v)), String(n)]} labelFormatter={label} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar yAxisId="p" stackId="drag" dataKey="tax" name="Tax" fill="#d45b43" isAnimationActive={false} />
-                <Bar yAxisId="p" stackId="drag" dataKey="adminFees" name="Admin fees" fill="#b17b12" isAnimationActive={false} />
-                <Bar yAxisId="p" stackId="drag" dataKey="otherFees" name="Other fees" fill="#5b63b7" isAnimationActive={false} />
-                <Line yAxisId="c" type="monotone" dataKey="cumDrag" name="Total drag so far" stroke="#26322c" strokeWidth={2} dot={false} isAnimationActive={false} />
+                <Area type="monotone" stackId="d" dataKey="cumTax" name="Tax" fill="#e9a497" stroke="#d45b43" isAnimationActive={false} />
+                <Area type="monotone" stackId="d" dataKey="cumAdmin" name="Admin fees" fill="#e3c78c" stroke="#b17b12" isAnimationActive={false} />
+                <Area type="monotone" stackId="d" dataKey="cumOther" name="Other fees" fill="#aeb2e0" stroke="#5b63b7" isAnimationActive={false} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
-          <p className="fc-chart-total">Total drag: <strong>{money(last.cumDrag)}</strong> (tax {money(last.cumTax)}, admin {money(last.cumAdmin)}, other {money(last.cumOther)})</p>
+          <p className="fc-chart-total">Tax {money(last.cumTax)} + admin {money(last.cumAdmin)} + other fees {money(last.cumOther)} = <strong>{money(last.cumDrag)}</strong></p>
         </div>
 
         <div className="comparison-chart-wrap">
-          <div className="comparison-chart-heading"><h3>3. Projected total return</h3><span>before tax and fees: {cur} per {unit} (bars), running total (line)</span></div>
+          <div className="comparison-chart-heading"><h3>C. Net: what stays in your account (A − B)</h3><span>{cur}, running totals (stacked) = your balance</span></div>
           <div className="fund-chart">
             <ResponsiveContainer>
-              <ComposedChart data={data} margin={{ top: 8, right: 4, bottom: 0, left: 0 }}>
+              <ComposedChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                 <CartesianGrid stroke="#e1e8e5" vertical={false} />
                 <XAxis dataKey="period" {...axis} tick={{ fontSize: 10, fill: '#637275' }} />
-                <YAxis yAxisId="p" tickFormatter={compact} width={46} tick={{ fontSize: 10, fill: '#637275' }} />
-                <YAxis yAxisId="c" orientation="right" tickFormatter={compact} width={46} tick={{ fontSize: 10, fill: '#637275' }} />
+                <YAxis tickFormatter={compact} width={50} tick={{ fontSize: 10, fill: '#637275' }} />
                 <Tooltip formatter={(v, n) => [money(Number(v)), String(n)]} labelFormatter={label} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar yAxisId="p" dataKey="growth" name={`Return per ${unit}`} fill="#7fbfb6" isAnimationActive={false} />
-                <Line yAxisId="c" type="monotone" dataKey="cumGrowth" name="Total return so far" stroke="#087e8b" strokeWidth={2.4} dot={false} isAnimationActive={false} />
+                <Area type="monotone" stackId="n" dataKey="startingCapital" name="Starting balance" fill="#c9d6d3" stroke="#9fb3ae" isAnimationActive={false} />
+                <Area type="monotone" stackId="n" dataKey="employeeNet" name="Your contributions" fill="#9ccfc9" stroke="#5aa69c" isAnimationActive={false} />
+                <Area type="monotone" stackId="n" dataKey="employerNet" name={t.contributionTax > 0 ? 'Employer (after tax)' : 'Employer contributions'} fill="#f0c58f" stroke="#c9934c" isAnimationActive={false} />
+                {hasGov && <Area type="monotone" stackId="n" dataKey="governmentNet" name="Government contribution" fill="#c7c3ef" stroke="#8b85c9" isAnimationActive={false} />}
+                <Area type="monotone" stackId="n" dataKey="cumNetReturn" name="Return after tax and fees" fill={color} fillOpacity={0.35} stroke={color} isAnimationActive={false} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
-          <p className="fc-chart-total">Total return before tax and fees: <strong>{money(last.cumGrowth)}</strong>. You keep {money(last.cumInvestNet)} of it after tax and fees.</p>
+          <p className="fc-chart-total">
+            Net paid in {money(last.netPaidIn)}{t.contributionTax + t.contributionCharges > 0 && <> (after {money(t.contributionTax + t.contributionCharges)} {t.contributionCharges > 0 ? 'contribution tax and charges' : 'contribution tax'})</>}
+            {' '}+ net return {money(last.cumNetReturn)} = <strong>{money(last.balance)}</strong>
+          </p>
         </div>
 
         <div className="comparison-chart-wrap">
-          <div className="comparison-chart-heading"><h3>4. Projected total net contributions</h3><span>{cur} paid in so far, after contribution tax (stacked), and the balance</span></div>
+          <div className="comparison-chart-heading"><h3>D. Return each {unit}: before and after drag</h3><span>{cur} per {unit} (bars), % a year (lines)</span></div>
           <div className="fund-chart">
             <ResponsiveContainer>
-              <ComposedChart data={data} margin={{ top: 8, right: 4, bottom: 0, left: 0 }}>
+              <ComposedChart data={data} margin={{ top: 8, right: 4, bottom: 0, left: 0 }} barGap={0}>
                 <CartesianGrid stroke="#e1e8e5" vertical={false} />
                 <XAxis dataKey="period" {...axis} tick={{ fontSize: 10, fill: '#637275' }} />
-                <YAxis tickFormatter={compact} width={46} tick={{ fontSize: 10, fill: '#637275' }} />
-                <Tooltip formatter={(v, n) => [money(Number(v)), String(n)]} labelFormatter={label} />
+                <YAxis yAxisId="m" tickFormatter={compact} width={50} tick={{ fontSize: 10, fill: '#637275' }} />
+                <YAxis yAxisId="p" orientation="right" tickFormatter={(v) => `${Number(v).toFixed(1)}%`} width={40} tick={{ fontSize: 10, fill: '#637275' }} />
+                <Tooltip formatter={(v, n) => [String(n).includes('%') ? `${Number(v).toFixed(2)}%` : money(Number(v)), String(n)]} labelFormatter={label} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Area type="monotone" stackId="in" dataKey="startingCapital" name="Starting balance" fill="#c9d6d3" stroke="#9fb3ae" isAnimationActive={false} />
-                <Area type="monotone" stackId="in" dataKey="employeeNet" name="Your contributions" fill="#9ccfc9" stroke="#5aa69c" isAnimationActive={false} />
-                <Area type="monotone" stackId="in" dataKey="employerNet" name={t.contributionTax > 0 ? 'Employer (after tax)' : 'Employer contributions'} fill="#f0c58f" stroke="#c9934c" isAnimationActive={false} />
-                {hasGov && <Area type="monotone" stackId="in" dataKey="government" name="Government contribution" fill="#c7c3ef" stroke="#8b85c9" isAnimationActive={false} />}
-                <Line type="monotone" dataKey="balance" name="Balance" stroke={color} strokeWidth={2.4} dot={false} isAnimationActive={false} />
+                <Bar yAxisId="m" dataKey="growth" name="Before drag" fill="#7fbfb6" isAnimationActive={false} />
+                <Bar yAxisId="m" dataKey="netReturn" name="After drag" fill={color} isAnimationActive={false} />
+                <Line yAxisId="p" type="monotone" dataKey="grossReturnPct" name="Before drag %" stroke="#087e8b" strokeDasharray="4 3" strokeWidth={1.6} dot={false} isAnimationActive={false} />
+                <Line yAxisId="p" type="monotone" dataKey="netReturnPct" name="After drag %" stroke="#26322c" strokeWidth={1.6} dot={false} isAnimationActive={false} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
-          <p className="fc-chart-total">Net contributions: <strong>{money(last.netPaidIn)}</strong> (start {money(last.startingCapital)} + you {money(last.employeeNet)} + employer {money(last.employerNet)}{hasGov ? ` + government ${money(last.government)}` : ''}){t.contributionTax > 0 && <>; {money(t.contributionTax)} contribution tax already taken off</>}. Balance {money(last.balance)} = net contributions + net investment growth{t.contributionCharges > 0 ? ' − contribution charges' : ''}.</p>
+          <p className="fc-chart-total">Return is earned on the <strong>whole balance</strong> (starting amount + contributions + earlier growth), so it grows as the balance grows. Year 1: {(data.length ? fund.yearly[0].grossReturnPct : 0).toFixed(2)}% before drag, {fund.yearly[0].netReturnPct.toFixed(2)}% after.</p>
         </div>
       </div>
 
@@ -261,8 +272,9 @@ function FundPanel({ fund, color, granularity, money, cur }: { fund: FundResult;
           </tbody>
         </table>
         <p className="fund-totals">
-          <strong>Bottom line:</strong> tax {money(t.contributionTax + t.earningsTax)} + admin fees {money(t.adminPctFees + t.fixedFees + t.platformFees)} +
-          other fees {money(t.investmentFees + t.performanceFees + t.contributionCharges)}. With the growth that money would have earned, the drag costs {money(fund.dragImpact)} off the final balance.
+          <strong>Bottom line:</strong> drag taken out (B) {money(fund.totalDrag)}. That money is no longer invested, so it also stops
+          growing: with no tax or fees this fund would reach {money(fund.noDragBalance)}, which is {money(fund.dragImpact)} more than
+          your balance of {money(fund.endBalance)}.
         </p>
       </div>
     </details>
@@ -567,7 +579,7 @@ export default function FundComparison({ initialQuery }: { initialQuery?: { text
                       ({money(Math.abs(diff) * 0.04)} a year of retirement income using the 4% rule of thumb). Its fees total{' '}
                       {money(Math.abs(feeDiff))} {feeDiff <= 0 ? 'less' : 'more'} than your current fund.
                       {!sameReturn && <> Part of the gap comes from a different return assumption ({options[k].grossReturnPct}% vs {options[0].grossReturnPct}%): past returns don&apos;t repeat reliably, so switch &quot;Returns to use&quot; to the long-term option to see the fee and tax difference on its own.</>}
-                      {options[k].risk !== options[0].risk && <> It is a {options[k].risk} fund and yours is {options[0].risk}: compare funds of the same risk level, or choose the risk that fits your time to retirement first.</>}
+                      {options[k].risk !== options[0].risk && <> It is {/^[aeiou]/.test(options[k].risk) ? 'an' : 'a'} {options[k].risk} fund and yours is {options[0].risk}: compare funds of the same risk level, or choose the risk that fits your time to retirement first.</>}
                     </li>
                   );
                 })}

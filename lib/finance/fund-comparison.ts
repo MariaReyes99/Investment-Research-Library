@@ -68,6 +68,7 @@ export interface PeriodPoint {
   /** Running totals after contribution tax (ESCT in NZ, 15% contributions tax in AU). */
   employeeNet: number;
   employerNet: number;
+  governmentNet: number;
   employer: number;
   government: number;
   /** Cumulative money put in (start + all contributions before tax/charges). */
@@ -214,23 +215,22 @@ export function optionFromProvider(f: ProviderFund, country: CountryCode, source
 /** Groups monthly points into quarters or years: flows are summed, balances taken at the end. Return % is a yearly rate. */
 export function aggregate(monthly: PeriodPoint[], months: number, startBalance: number, prefix: string): PeriodPoint[] {
   const out: PeriodPoint[] = [];
-  let startBal = startBalance;
+  void startBalance; // kept for callers; rates come from the monthly points
   for (let i = 0; i + months <= monthly.length; i += months) {
     const chunk = monthly.slice(i, i + months);
     const last = chunk[chunk.length - 1];
     const sum = (k: 'growth' | 'tax' | 'adminFees' | 'otherFees' | 'netReturn') => chunk.reduce((s, p) => s + p[k], 0);
-    const avg = (startBal + last.balance) / 2 || 1;
-    const perYear = 12 / months;
     const n = out.length + 1;
     const growth = sum('growth');
     const net = sum('netReturn');
     out.push({
       ...last, period: n, label: months === 3 ? `Y${Math.ceil(n / 4)} ${prefix}${((n - 1) % 4) + 1}` : `${prefix}${n}`,
       growth, tax: sum('tax'), adminFees: sum('adminFees'), otherFees: sum('otherFees'), netReturn: net,
-      grossReturnPct: (growth / avg) * 100 * perYear,
-      netReturnPct: (net / avg) * 100 * perYear,
+      // Each month's rate is already a yearly rate: average them geometrically so the
+      // figure matches the fund's stated return (contributions don't distort it).
+      grossReturnPct: (Math.pow(chunk.reduce((m, p) => m * (1 + p.grossReturnPct / 100), 1), 1 / chunk.length) - 1) * 100,
+      netReturnPct: (Math.pow(chunk.reduce((m, p) => m * (1 + p.netReturnPct / 100), 1), 1 / chunk.length) - 1) * 100,
     });
-    startBal = last.balance;
   }
   return out;
 }
@@ -250,6 +250,7 @@ function run(input: FundComparisonInput, o: FundOptionInput, withDrag: boolean) 
   let platformInYear = 0;
   let employeeNetSum = 0;
   let employerNetSum = 0;
+  let governmentNetSum = 0;
 
   for (let m = 1; m <= input.years * 12; m++) {
     const monthSalary = salary / 12;
@@ -269,10 +270,13 @@ function run(input: FundComparisonInput, o: FundOptionInput, withDrag: boolean) 
     if (withDrag && c === 'NZ') employerTax = employer * nzEsctRate(salary + (salary * input.employerPct) / 100);
     if (withDrag && c === 'AU') { employerTax = employer * AU_CONTRIBUTIONS_TAX; employeeTax = ((monthSalary * input.employeePct) / 100) * AU_CONTRIBUTIONS_TAX; }
     const contributionTax = employerTax + employeeTax;
-    employeeNetSum += employee - employeeTax;
-    employerNetSum += employer - employerTax;
     const gross = employee + employer + government;
-    const charge = withDrag ? (gross - contributionTax) * (o.contributionChargePct / 100) : 0;
+    const chargeRate = withDrag ? o.contributionChargePct / 100 : 0;
+    const charge = (gross - contributionTax) * chargeRate;
+    // What actually lands in the account from each source, after contribution tax and charges
+    employeeNetSum += (employee - employeeTax) * (1 - chargeRate);
+    employerNetSum += (employer - employerTax) * (1 - chargeRate);
+    governmentNetSum += government * (1 - chargeRate);
     balance += gross - contributionTax - charge;
 
     // ---- growth and fees
@@ -309,7 +313,7 @@ function run(input: FundComparisonInput, o: FundOptionInput, withDrag: boolean) 
     monthly.push({
       period: m, label: `Y${Math.ceil(m / 12)} M${((m - 1) % 12) + 1}`, balance,
       startingCapital: input.startBalance, employee: t.employee, employer: t.employer, government: t.government, totalPaidIn: paidIn,
-      employeeNet: employeeNetSum, employerNet: employerNetSum,
+      employeeNet: employeeNetSum, employerNet: employerNetSum, governmentNet: governmentNetSum,
       growth, tax, adminFees: admin, otherFees: other, netReturn,
       grossReturnPct: before > 0 ? (Math.pow(1 + rGross, 12) - 1) * 100 : 0,
       netReturnPct: before > 0 ? (Math.pow(1 + netReturn / before, 12) - 1) * 100 : 0,

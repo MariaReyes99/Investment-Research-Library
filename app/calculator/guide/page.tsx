@@ -99,6 +99,16 @@ export default function ProjectorGuidePage() {
         <h3>10. Goal, comparisons and settings</h3>
         <p>Set a target net worth and the age you want to reach it. Use &quot;Compare return assumptions&quot; to see the same plan at, say, 4%, 6% and 8%. Under &quot;Inflation, reinvested savings and market swings&quot;, the defaults suit most people; raise &quot;Market ups and downs&quot; to 15 or more if most of your money is in shares.</p>
 
+        <h3>11. Compare KiwiSaver, super or pension providers</h3>
+        <p>Open &quot;📊 My numbers&quot; and choose <strong>Open the comparison</strong>. Pick your current fund first, then up to three others, or type a request such as &quot;compare the top 3 providers in NZ&quot; or &quot;cheapest 3 balanced super funds in Australia&quot;. Fees and past returns fill in from each provider&apos;s latest published figures; change any number to match your statement.</p>
+        <ul>
+          <li><strong>A. Gross:</strong> starting balance, your, employer and government contributions, plus the return before tax and fees.</li>
+          <li><strong>B. Drag:</strong> tax, admin fees and other fees taken out.</li>
+          <li><strong>C. Net:</strong> what stays in your account. A − B = C, your balance.</li>
+          <li><strong>D. Return each period:</strong> before and after drag. Return is earned on the whole balance, not just new contributions.</li>
+        </ul>
+        <p>Switch between Monthly, Quarterly and Annual. Each fund&apos;s table says how every number was worked out, tagged with the chart it belongs to. Set &quot;Returns to use&quot; to the long-term option to compare fees and tax only, since past returns don&apos;t repeat reliably.</p>
+
         <h2 id="life-events">What to change as life changes</h2>
         <p>Update your plan when something big changes. The table shows what to add, change or remove.</p>
         <div className="table-scroll">

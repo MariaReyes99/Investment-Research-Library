@@ -1064,3 +1064,8 @@ body:has(.guide-shell) .intro-launcher { bottom: 96px; }
   .fc-notes td:nth-child(3) { grid-column: 1 / -1; }
   .fc-notes td:last-child { grid-row: 1; grid-column: 3; }
 }
+.fc-flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0 10px; font-size: 13px; color: #354947; }
+.fc-flow-box { padding: 5px 10px; border-radius: 7px; border: 1px solid #c9dad6; background: #fff; font-weight: 700; }
+.fc-flow-box.is-gross { border-color: #7fbfb6; }
+.fc-flow-box.is-drag { border-color: #e9a497; color: #a3402c; }
+.fc-flow-box.is-net { border-color: var(--option-color); box-shadow: inset 3px 0 0 var(--option-color); }

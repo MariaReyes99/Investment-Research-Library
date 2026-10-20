@@ -38,14 +38,14 @@ const SCENES: Scene[] = [
     points: ['Strengths and weaknesses', 'Risks to watch', 'Levers to explore', 'Emergency fund check'],
   },
   {
-    icon: '📚', title: 'Ask the library',
-    line: "Ask questions in plain words, and get answers with sources you can check. Switch on 'include my plan' to have your own numbers reviewed against well-known investing principles and your country's rules.",
-    points: ['Plain-English answers', 'Sources you can check', 'Reviews your own plan'],
+    icon: '📚', title: 'Ask about your numbers',
+    line: "The library and your numbers are on one page. Ask questions in plain words and get answers with sources you can check. The library can see your plan and fund comparison, so you can ask what your numbers mean and how to improve them.",
+    points: ['Plain-English answers', 'Sources you can check', 'Sees your plan and comparison'],
   },
   {
-    icon: '⚖️', title: 'Compare platforms and fees',
-    line: "See how fees add up over the years, side by side, and find free tools from trusted sources such as Sorted.",
-    points: ['Fees side by side', 'Named on the chart', 'Free trusted tools'],
+    icon: '⚖️', title: 'Stay or move providers?', mood: 'point',
+    line: "Compare KiwiSaver, super or pension providers, or just type 'compare the top 3 providers in New Zealand'. Each fund shows what you paid in plus its return, minus tax and fees, to give your balance.",
+    points: ['Latest published fees', 'Type a quick request', 'Gross − drag = your balance', '5 countries'],
   },
   {
     icon: '🔒', title: 'Private and safe',
