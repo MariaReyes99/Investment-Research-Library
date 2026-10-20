@@ -14,7 +14,7 @@ export default function AboutPage() {
   return (
     <div className="page-shell">
       <SiteHeader current="about" />
-      <main className="page-main prose-page">
+      <main id="main-content" tabIndex={-1} className="page-main prose-page">
         <h1 className="page-title">About &amp; privacy</h1>
 
         <h2>What this is</h2>

@@ -9,8 +9,8 @@ export default function CalculatorRedirect() {
     window.location.replace(`/?${params.toString()}${window.location.hash}`);
   }, []);
   return (
-    <main className="page-main">
-      <p>The wealth projector is now on the library page. <a href="/?tab=numbers">Open My numbers →</a></p>
+    <main id="main-content" tabIndex={-1} className="page-main">
+      <p>The wealth projector is now on the library page. <a href="/?tab=numbers">Open My financial numbers →</a></p>
     </main>
   );
 }

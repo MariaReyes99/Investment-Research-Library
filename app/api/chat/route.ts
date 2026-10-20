@@ -30,6 +30,7 @@ import {
   countryContext,
   sharedPlanContext,
   fundComparisonContext,
+  OVERALL_PICTURE_GUIDE,
   REWRITE_INSTRUCTION,
   isPersonalAdviceRequest,
   outputRedFlags,
@@ -100,7 +101,7 @@ export async function POST(req: Request) {
     const json = JSON.stringify(sharedPlan.data, (key, value) => (key === 'name' && typeof value === 'string' ? redactPII(value).clean : value));
     if (json.length <= 12_000) planNote = sharedPlanContext(json);
   }
-  // The fund comparison on the same page, as short text, only sent while "Include my numbers" is on
+  // The fund comparison on the same page, as short text, only sent while "Include my financial numbers" is on
   const comparisonNote = fundComparisonContext((body.data as { comparison?: unknown } | null)?.comparison);
   const retireIn = isCountry(requestedRetireIn) && requestedRetireIn !== country ? requestedRetireIn : null;
   if (!cleaned.ok) return text(cleaned.message, cleaned.status);
@@ -138,7 +139,7 @@ export async function POST(req: Request) {
   const latestText = messages[messages.length - 1].content;
   const holdForCheck = isPersonalAdviceRequest(latestText);
   const amountsIn = currencyCountryIn(latestText);
-  const system = [SYSTEM_PROMPT, countryContext(country, amountsIn, retireIn), planNote, comparisonNote, holdForCheck ? PERSONAL_ADVICE_STEER : ''].filter(Boolean).join('\n\n');
+  const system = [SYSTEM_PROMPT, countryContext(country, amountsIn, retireIn), planNote, comparisonNote, planNote && comparisonNote ? OVERALL_PICTURE_GUIDE : '', holdForCheck ? PERSONAL_ADVICE_STEER : ''].filter(Boolean).join('\n\n');
 
   // An anonymous, hashed id lets OpenAI trace abuse without any personal details.
   const openaiUser = createHash('sha256').update(`openai:${viewer.key}`).digest('hex').slice(0, 32);

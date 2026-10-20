@@ -17,7 +17,7 @@ function fromBase64Url(text: string) {
   return new TextDecoder().decode(Uint8Array.from(binary, (c) => c.charCodeAt(0)));
 }
 
-/** The projector now lives on the library page, in the "My numbers" tab, "Advanced" view. */
+/** The projector now lives on the library page, in the "My financial numbers" tab, "Advanced" view. */
 export function projectorLink(input: HouseholdInput) {
   return `/?tab=numbers&view=full#plan=${toBase64Url(JSON.stringify(input))}`;
 }

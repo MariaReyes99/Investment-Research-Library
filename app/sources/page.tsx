@@ -13,7 +13,7 @@ export default function SourcesPage() {
   return (
     <div className="page-shell">
       <SiteHeader current="sources" />
-      <main className="page-main prose-page">
+      <main id="main-content" tabIndex={-1} className="page-main prose-page">
         <h1 className="page-title">Sources</h1>
         <p className="page-lede">
           Every document the library answers from, with where it comes from, the date its facts were checked, and when

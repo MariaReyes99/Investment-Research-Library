@@ -16,10 +16,10 @@ import {
   COUNTRY_DEFAULTS, compareFunds, optionFromProvider, UK_QUALIFYING_LOWER, UK_QUALIFYING_UPPER,
   type CalcGroup, type FundOptionInput, type FundResult, type ReturnSource, type UsAccount,
 } from '../lib/finance/fund-comparison';
-import { setComparisonSummary } from '../lib/comparisonShare';
+import { clearSavedComparison, COMPARISON_STATE_KEY, setComparisonSummary } from '../lib/comparisonShare';
 import { parseFundQuery, pickTopFunds } from '../lib/finance/fundQuery';
 
-const COLORS = ['#087e8b', '#d45b43', '#b17b12', '#5b63b7'];
+const COLORS = ['#087e8b', '#c0472f', '#8a5d00', '#5b63b7'];
 const CUSTOM = '__custom__';
 const compact = (n: number) => new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(n);
 
@@ -64,20 +64,56 @@ const QUERY_EXAMPLES = [
   'Top 3 PERA funds in the Philippines',
 ];
 
-function NumberField({ id, label, value, step, unit, onChange, min = 0 }: {
-  id: string; label: string; value: number; step: number; unit?: string; onChange: (v: number) => void; min?: number;
+function NumberField({ id, label, value, step, unit, onChange, min = 0, hint }: {
+  id: string; label: string; value: number; step: number; unit?: string; onChange: (v: number) => void; min?: number; hint?: string;
 }) {
+  const invalid = !Number.isFinite(value);
   return (
-    <label className="comparison-field" htmlFor={id}>
-      <span>{label}</span>
+    <div className="comparison-field">
+      <label htmlFor={id}>{label}</label>
       <span className="comparison-input-wrap">
         <input id={id} type="number" inputMode="decimal" min={min} step={step} value={Number.isFinite(value) ? value : ''}
+          aria-describedby={[unit ? `${id}-unit` : '', hint ? `${id}-hint` : ''].filter(Boolean).join(' ') || undefined}
+          aria-invalid={invalid || undefined}
           onChange={(e) => onChange(e.target.value === '' ? NaN : Number(e.target.value))} />
-        {unit && <small>{unit}</small>}
+        {unit && <small id={`${id}-unit`}>{unit}</small>}
       </span>
-    </label>
+      {hint && <small className="fc-field-hint" id={`${id}-hint`}>{hint}</small>}
+      {invalid && <small className="fc-field-error" role="alert">Enter a number.</small>}
+    </div>
   );
 }
+
+/** Where to find each number, in the person's country. */
+const HINTS: Record<CountryCode, { balance: string; contribution: string; employer: string }> = {
+  NZ: {
+    balance: 'Your latest KiwiSaver statement, your provider\'s app or website, or myIR.',
+    contribution: '3%, 3.5%, 4%, 6%, 8% or 10%: the KiwiSaver deduction on your payslip.',
+    employer: 'At least 3.5% from April 2026, before ESCT tax. Check your payslip or contract.',
+  },
+  AU: {
+    balance: 'Your super fund\'s app or statement, or myGov (ATO).',
+    contribution: 'Extra before-tax (salary sacrifice) contributions as a % of salary. Enter 0 if none.',
+    employer: 'The Super Guarantee is 12% of your ordinary earnings.',
+  },
+  US: {
+    balance: 'Your 401(k) or IRA statement or plan website.',
+    contribution: 'Your 401(k) deferral % from your plan website or payslip.',
+    employer: 'Your employer match. For example, 50% of up to 6% of salary = 3%.',
+  },
+  UK: {
+    balance: 'Your pension provider\'s app or annual statement. Lost pots: the Pension Tracing Service.',
+    contribution: 'The pension % on your payslip (often 5%, including tax relief).',
+    employer: 'At least 3% of qualifying earnings. Check your payslip or scheme booklet.',
+  },
+  PH: {
+    balance: 'Your PERA administrator\'s statement, or your Pag-IBIG MP2 records.',
+    contribution: 'Your PERA contribution as a % of salary (up to ₱200,000 a year).',
+    employer: 'Usually 0, unless your employer pays into your PERA.',
+  },
+};
+
+const totalFeePct = (o: FundOptionInput) => o.investmentFeePct + o.adminFeePct + o.performanceFeePct + o.platformFeePct;
 
 /** Starts with three funds of the same risk from different providers, so the comparison is like for like. */
 function startOptions(country: CountryCode, source: ReturnSource): Draft[] {
@@ -97,6 +133,39 @@ function startOptions(country: CountryCode, source: ReturnSource): Draft[] {
 function toDrafts(funds: ProviderFund[], country: CountryCode, source: ReturnSource): Draft[] {
   return funds.map((f, i) => ({ ...optionFromProvider(f, country, source, `fund-${i + 1}`), choice: f.id }));
 }
+
+/** Everything the person can set, saved on this device so the comparison (and the library's view of it) survives a reload. */
+type Settings = {
+  startBalance: number; salary: number; salaryGrowthPct: number; employeePct: number; employerPct: number; extraMonthly: number;
+  years: number; inflationPct: number; nzPir: number; nzGov: boolean; usAccount: UsAccount; returnSource: ReturnSource;
+  options: Draft[]; ranked: boolean; queryNote: string;
+};
+type Saved = Settings & { v: 1; country: CountryCode };
+
+function defaultSettings(country: CountryCode): Settings {
+  const d = COUNTRY_DEFAULTS[country];
+  return {
+    startBalance: 50_000, salary: d.salary, salaryGrowthPct: 2.5, employeePct: d.employeePct, employerPct: d.employerPct, extraMonthly: 0,
+    years: 25, inflationPct: COUNTRIES[country].inflationPct, nzPir: 28, nzGov: true, usAccount: 'traditional', returnSource: 'historic',
+    options: startOptions(country, 'historic'), ranked: false, queryNote: '',
+  };
+}
+
+function readSaved(country: CountryCode): Saved | null {
+  try {
+    const s = JSON.parse(window.localStorage.getItem(COMPARISON_STATE_KEY) ?? 'null') as Saved | null;
+    return s && s.v === 1 && s.country === country && Array.isArray(s.options) && s.options.length > 0 ? s : null;
+  } catch { return null; }
+}
+
+/** When and how the money can be taken out, and what it costs: shared with the library so it can explain access and cross-border rules. */
+const ACCESS: Record<CountryCode, string> = {
+  NZ: 'KiwiSaver is locked in until 65, except a first-home withdrawal (after 3 years), significant financial hardship, serious illness, or moving overseas permanently (not to Australia, where savings can move to an Australian super fund instead). Withdrawals are tax-free; fees and PIE tax keep applying while the money stays invested.',
+  AU: 'Super is preserved until preservation age (60) and retiring, or age 65; withdrawals from a taxed fund are generally tax-free from 60. Early release only in limited cases. Temporary residents who leave can claim a departing payment, which is taxed (35%, or 65% for working holiday makers). NZ citizens can move super to KiwiSaver under trans-Tasman portability.',
+  US: 'Withdrawals from a 401(k) or traditional IRA before 59½ usually add a 10% penalty on top of income tax; required minimum distributions start at 73 (75 for those born in 1960 or later). Roth withdrawals are tax-free after 59½ once the account is 5 years old. Non-residents usually face 30% withholding unless a tax treaty lowers it.',
+  UK: 'Pensions can be accessed from 55 (57 from April 2028). Usually 25% is tax-free (up to the lump sum allowance) and the rest is taxed as income. Transfers to an overseas scheme (QROPS) can face a 25% overseas transfer charge.',
+  PH: 'PERA can be withdrawn from 55 after at least 5 years of contributions; earlier withdrawals lose the tax benefits and incur penalties. Pag-IBIG MP2 matures after 5 years; early withdrawal is allowed only in specific cases and can reduce dividends.',
+};
 
 /** What to weigh before staying or moving, by country. */
 const CHECKLIST: Record<CountryCode, string[]> = {
@@ -149,6 +218,13 @@ function FundPanel({ fund, color, granularity, money, cur }: { fund: FundResult;
     });
   }, [fund, granularity]);
   const last = data[data.length - 1];
+  const yearRows = useMemo(() => {
+    let growth = 0, drag = 0;
+    return fund.yearly.map((p) => {
+      growth += p.growth; drag += p.tax + p.adminFees + p.otherFees;
+      return { period: p.period, paid: p.startingCapital + p.employee + p.employer + p.government, growth, drag, balance: p.balance, net: p.netReturn, pct: p.netReturnPct };
+    });
+  }, [fund]);
   const unit = UNIT[granularity];
   const axis = axisFor(granularity, data.length);
   const label = periodLabel(granularity);
@@ -165,8 +241,8 @@ function FundPanel({ fund, color, granularity, money, cur }: { fund: FundResult;
       </p>
       <div className="fund-charts">
         <div className="comparison-chart-wrap">
-          <div className="comparison-chart-heading"><h3>A. Gross: contributions + return, before drag</h3><span>{cur}, running totals (stacked)</span></div>
-          <div className="fund-chart">
+          <div className="comparison-chart-heading"><h4>A. Gross: contributions + return, before drag</h4><span>{cur}, running totals (stacked)</span></div>
+          <div className="fund-chart" aria-hidden="true">
             <ResponsiveContainer>
               <ComposedChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                 <CartesianGrid stroke="#e1e8e5" vertical={false} />
@@ -189,8 +265,8 @@ function FundPanel({ fund, color, granularity, money, cur }: { fund: FundResult;
         </div>
 
         <div className="comparison-chart-wrap">
-          <div className="comparison-chart-heading"><h3>B. Drag: tax and fees taken out</h3><span>{cur}, running totals (stacked)</span></div>
-          <div className="fund-chart">
+          <div className="comparison-chart-heading"><h4>B. Drag: tax and fees taken out</h4><span>{cur}, running totals (stacked)</span></div>
+          <div className="fund-chart" aria-hidden="true">
             <ResponsiveContainer>
               <ComposedChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                 <CartesianGrid stroke="#e1e8e5" vertical={false} />
@@ -208,8 +284,8 @@ function FundPanel({ fund, color, granularity, money, cur }: { fund: FundResult;
         </div>
 
         <div className="comparison-chart-wrap">
-          <div className="comparison-chart-heading"><h3>C. Net: what stays in your account (A − B)</h3><span>{cur}, running totals (stacked) = your balance</span></div>
-          <div className="fund-chart">
+          <div className="comparison-chart-heading"><h4>C. Net: what stays in your account (A − B)</h4><span>{cur}, running totals (stacked) = your balance</span></div>
+          <div className="fund-chart" aria-hidden="true">
             <ResponsiveContainer>
               <ComposedChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                 <CartesianGrid stroke="#e1e8e5" vertical={false} />
@@ -232,8 +308,8 @@ function FundPanel({ fund, color, granularity, money, cur }: { fund: FundResult;
         </div>
 
         <div className="comparison-chart-wrap">
-          <div className="comparison-chart-heading"><h3>D. Return each {unit}: before and after drag</h3><span>{cur} per {unit} (bars), % a year (lines)</span></div>
-          <div className="fund-chart">
+          <div className="comparison-chart-heading"><h4>D. Return each {unit}: before and after drag</h4><span>{cur} per {unit} (bars), % a year (lines)</span></div>
+          <div className="fund-chart" aria-hidden="true">
             <ResponsiveContainer>
               <ComposedChart data={data} margin={{ top: 8, right: 4, bottom: 0, left: 0 }} barGap={0}>
                 <CartesianGrid stroke="#e1e8e5" vertical={false} />
@@ -252,6 +328,25 @@ function FundPanel({ fund, color, granularity, money, cur }: { fund: FundResult;
           <p className="fc-chart-total">Return is earned on the <strong>whole balance</strong> (starting amount + contributions + earlier growth), so it grows as the balance grows. Year 1: {(data.length ? fund.yearly[0].grossReturnPct : 0).toFixed(2)}% before drag, {fund.yearly[0].netReturnPct.toFixed(2)}% after.</p>
         </div>
       </div>
+
+      <details className="fc-table-view">
+        <summary>Show these charts as a table (year by year)</summary>
+        <div className="table-scroll">
+          <table className="comparison-table fc-year-table">
+            <caption>{fund.name}: running totals at the end of each year, {cur}</caption>
+            <thead>
+              <tr><th scope="col">Year</th><th scope="col">A. Paid in</th><th scope="col">A. Return before drag</th><th scope="col">B. Drag</th><th scope="col">C. Balance</th><th scope="col">D. Return after drag that year</th></tr>
+            </thead>
+            <tbody>
+              {yearRows.map((r) => (
+                <tr key={r.period}>
+                  <th scope="row">{r.period}</th><td>{money(r.paid)}</td><td>{money(r.growth)}</td><td>{money(r.drag)}</td><td>{money(r.balance)}</td><td>{money(r.net)} ({r.pct.toFixed(1)}%)</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </details>
 
       <div className="fund-summary">
         <h4>How each number was calculated</h4>
@@ -304,33 +399,55 @@ export default function FundComparison({ initialQuery }: { initialQuery?: { text
   const [queryNote, setQueryNote] = useState('');
   const [ranked, setRanked] = useState(false);
   // Funds picked by a query for another country, applied once the country has switched
-  const pending = useRef<{ country: CountryCode; funds: ProviderFund[] } | null>(null);
+  const pending = useRef<{ country: CountryCode; funds: ProviderFund[]; note: string } | null>(null);
 
-  // New country: new providers and contribution defaults
+  const apply = (x: Settings) => {
+    setStartBalance(x.startBalance); setSalary(x.salary); setSalaryGrowthPct(x.salaryGrowthPct);
+    setEmployeePct(x.employeePct); setEmployerPct(x.employerPct); setExtraMonthly(x.extraMonthly); setYears(x.years);
+    setInflationPct(x.inflationPct); setNzPir(x.nzPir); setNzGov(x.nzGov); setUsAccount(x.usAccount);
+    setReturnSource(x.returnSource); setOptions(x.options); setRanked(x.ranked); setQueryNote(x.queryNote);
+  };
+
+  // New country (or first load): restore this country's saved comparison, or start from its defaults
   useEffect(() => {
-    const def = COUNTRY_DEFAULTS[country];
-    setSalary(def.salary); setEmployeePct(def.employeePct); setEmployerPct(def.employerPct);
-    setInflationPct(COUNTRIES[country].inflationPct);
     const p = pending.current;
     if (p && p.country === country) {
-      setOptions(toDrafts(p.funds, country, returnSource));
+      apply({ ...defaultSettings(country), options: toDrafts(p.funds, country, 'historic'), ranked: true, queryNote: p.note });
       pending.current = null;
-    } else {
-      setOptions(startOptions(country, returnSource));
-      setRanked(false); setQueryNote('');
+      return;
     }
+    apply(readSaved(country) ?? defaultSettings(country));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [country]);
+
+  const settings: Settings = useMemo(() => ({
+    startBalance, salary, salaryGrowthPct, employeePct, employerPct, extraMonthly, years, inflationPct, nzPir, nzGov, usAccount,
+    returnSource, options, ranked, queryNote,
+  }), [startBalance, salary, salaryGrowthPct, employeePct, employerPct, extraMonthly, years, inflationPct, nzPir, nzGov, usAccount, returnSource, options, ranked, queryNote]);
+  // Only a comparison the person has changed is saved and shared with the library
+  const edited = useMemo(() => JSON.stringify(settings) !== JSON.stringify(defaultSettings(country)), [settings, country]);
+  useEffect(() => {
+    if (!edited) return;
+    try { window.localStorage.setItem(COMPARISON_STATE_KEY, JSON.stringify({ v: 1, country, ...settings } satisfies Saved)); } catch { /* storage unavailable */ }
+  }, [edited, settings, country]);
+
+  const startAgain = () => {
+    clearSavedComparison();
+    pending.current = null;
+    setQuery('');
+    apply(defaultSettings(country));
+  };
 
   const runQuery = (text: string) => {
     const q = parseFundQuery(text);
     const target = q.country ?? country;
     const pick = pickTopFunds(target, q);
     const where = `${COUNTRIES[target].name} (${COUNTRY_DEFAULTS[target].label})`;
-    setQueryNote(`${where}: ${pick.explanation}${q.country ? '' : ` No country named, so I used ${COUNTRIES[target].name}.`}`);
+    const note = `${where}: ${pick.explanation}${q.country ? '' : ` No country named, so I used ${COUNTRIES[target].name}.`}`;
+    setQueryNote(note);
     setRanked(true);
     if (target !== country) {
-      pending.current = { country: target, funds: pick.funds };
+      pending.current = { country: target, funds: pick.funds, note };
       setCountry(target);
     } else {
       setOptions(toDrafts(pick.funds, target, returnSource));
@@ -383,97 +500,143 @@ export default function FundComparison({ initialQuery }: { initialQuery?: { text
     }, money);
   }, [country, startBalance, salary, salaryGrowthPct, employeePct, employerPct, extraMonthly, years, inflationPct, nzPir, nzGov, usAccount, options, money]);
 
-  // Share a short summary with the library chat on this page
+  // Share a summary with the library chat (saved on this device), once the person has set up their own comparison
   useEffect(() => {
-    if (!result) { setComparisonSummary(''); return; }
+    if (!result || !edited) { setComparisonSummary(''); return; }
     const i = result.inputs;
+    const first = result.funds[0];
     const lines = [
-      `${COUNTRIES[country].name} ${d.label} comparison over ${i.years} years: start ${money(i.startBalance)}, salary ${money(i.salary)} (+${i.salaryGrowthPct}%/yr), employee ${i.employeePct}%, employer ${i.employerPct}%${country === 'NZ' ? `, PIR ${i.nzPir}%` : ''}${country === 'US' ? `, ${i.usAccount} account` : ''}.`,
+      `${COUNTRIES[country].name} retirement fund comparison (${d.label}) over ${i.years} years: current balance ${money(i.startBalance)}, salary ${money(i.salary)} (+${i.salaryGrowthPct}%/yr), employee ${i.employeePct}%, employer ${i.employerPct}%, extra ${money(i.extraMonthly)}/month, inflation ${i.inflationPct}%${country === 'NZ' ? `, PIR ${i.nzPir}%, government contribution ${i.nzGovContribution ? 'included' : 'not included'}` : ''}${country === 'US' ? `, ${i.usAccount} account` : ''}. Returns used: ${returnSource === 'historic' ? "each fund's published past return, converted to before fees and tax" : 'the same long-term return for each risk level'}; the model assumes a steady return every year (no market falls).`,
+      ranked ? 'Funds were picked from a ranking request, so fund 1 may not be the person\'s current fund.' : `Fund 1 (${first.name}) is the person's current fund.`,
       ...result.funds.map((f, k) => {
         const o = options[k];
-        return `- ${f.name}: gross return ${o.grossReturnPct}%, fund fee ${o.investmentFeePct}%${o.adminFeePct ? `, admin ${o.adminFeePct}%` : ''}${o.fixedFeePerYear ? `, fixed ${money(o.fixedFeePerYear)}/yr` : ''}${o.performanceFeePct ? `, performance ~${o.performanceFeePct}%` : ''}${o.contributionChargePct ? `, contribution charge ${o.contributionChargePct}%` : ''}. End balance ${money(f.endBalance)} (${money(f.endBalanceReal)} today's money). Tax ${money(f.totals.contributionTax + f.totals.earningsTax)}, admin fees ${money(f.totals.adminPctFees + f.totals.fixedFees + f.totals.platformFees)}, other fees ${money(f.totals.investmentFees + f.totals.performanceFees + f.totals.contributionCharges)}; drag cost ${money(f.dragImpact)} in final balance.`;
+        const t = f.totals;
+        const gross = i.startBalance + t.employee + t.employer + t.government + t.growth;
+        return [
+          `- ${f.name} (${o.risk}): return before fees and tax ${o.grossReturnPct}%/yr; fund fee ${o.investmentFeePct}%${o.adminFeePct ? `, admin ${o.adminFeePct}%` : ''}${o.fixedFeePerYear ? `, fixed ${money(o.fixedFeePerYear)}/yr` : ''}${o.performanceFeePct ? `, performance ~${o.performanceFeePct}%` : ''}${o.platformFeePct ? `, platform ${o.platformFeePct}%` : ''}${o.contributionChargePct ? `, ${o.contributionChargePct}% off each contribution` : ''}.`,
+          `  A gross ${money(gross)} (paid in ${money(i.startBalance + t.employee + t.employer + t.government)} incl. government ${money(t.government)}, return ${money(t.growth)}) - B drag ${money(f.totalDrag)} (tax ${money(t.contributionTax + t.earningsTax)}, admin ${money(t.adminPctFees + t.fixedFees + t.platformFees)}, other fees ${money(t.investmentFees + t.performanceFees + t.contributionCharges)}) = C balance ${money(f.endBalance)} (${money(f.endBalanceReal)} in today's money). Without any drag it would be ${money(f.noDragBalance)}.`,
+          k > 0 ? `  vs fund 1: ${f.endBalance >= first.endBalance ? '+' : '-'}${money(Math.abs(f.endBalance - first.endBalance))}.` : '',
+          f.withdrawalTaxNote ? `  When withdrawn: ${f.withdrawalTaxNote}` : '',
+        ].filter(Boolean).join('\n');
       }),
+      `Access and costs of taking the money out (${COUNTRIES[country].name}): ${ACCESS[country]}`,
     ];
     if (ranked && queryNote) lines.unshift(`Funds chosen from the person's request: ${queryNote}`);
     setComparisonSummary(lines.join('\n'));
-  }, [result, options, country, d.label, money, ranked, queryNote]);
-  useEffect(() => () => setComparisonSummary(''), []);
+  }, [result, edited, options, country, d.label, money, ranked, queryNote, returnSource]);
 
   const current = result?.funds[0];
+  // A short update for screen readers when the results change
+  const liveSummary = useMemo(() => (result
+    ? `Results updated. After ${years} years: ${result.funds.map((f) => `${f.name} ${money(f.endBalance)}`).join('; ')}.`
+    : ''), [result, years, money]);
 
   return (
     <section className="comparison-section" aria-labelledby="fund-comparison-title">
       <header className="comparison-heading">
-        <p className="comparison-kicker">{COUNTRIES[country].name.toUpperCase()} · {d.label.toUpperCase()} · SAME PERSON, DIFFERENT FUNDS</p>
-        <h2 id="fund-comparison-title">Compare {d.label} providers</h2>
-        <p>
-          Pick your current fund first, then up to three others. Fees and returns are filled in from each provider&apos;s latest
-          published figures (with the source and date); change any number to match your own statement. Choose
-          &quot;Other&quot; to add a provider that isn&apos;t listed. Country: change it with &quot;I live in&quot;.
-        </p>
+        <p className="comparison-kicker">{COUNTRIES[country].name} · {d.label} · same person, different funds</p>
+        <div className="fc-title-row">
+          <h2 id="fund-comparison-title">Retirement fund comparison: {d.label}</h2>
+          <button type="button" className="fc-reset" onClick={startAgain} disabled={!edited && !query}
+            aria-describedby="fc-reset-hint">↺ Start again</button>
+          <span id="fc-reset-hint" className="sr-only">Clears this comparison and goes back to the starting values.</span>
+        </div>
+        <ol className="fc-steps" aria-label="How to use the comparison">
+          <li><a href="#fc-step-1"><b>1</b> Your details</a></li>
+          <li><a href="#fc-step-2"><b>2</b> Choose funds</a></li>
+          <li><a href="#fc-step-3"><b>3</b> Read the results</a></li>
+        </ol>
+        <details className="fc-help">
+          <summary>How to use this, and where to find your numbers</summary>
+          <ol>
+            <li><strong>Your details:</strong> enter your balance, salary and contribution rates. The hint under each box says where to find it. You can leave the optional settings as they are.</li>
+            <li><strong>Choose funds:</strong> pick your current fund first, then up to three others, or type a request like &quot;compare the top 3 providers in {COUNTRIES[country].name}&quot;. Fees and past returns fill in automatically from each provider&apos;s latest published figures.</li>
+            <li><strong>Read the results:</strong> the table compares final balances. Under each fund, four charts show A: money paid in plus return, B: tax and fees, C: what stays in your account (A minus B), and D: the return each year. Each chart can be shown as a table.</li>
+          </ol>
+          <p>Only change a fund&apos;s fees if your own statement shows different figures. Your comparison is saved on this device, and the library can answer questions about it.</p>
+        </details>
       </header>
 
-      <form className="fc-query" onSubmit={(e) => { e.preventDefault(); if (query.trim()) runQuery(query); }}>
-        <label htmlFor="fc-query-input">Ask for a comparison</label>
-        <div className="fc-query-row">
-          <input id="fc-query-input" type="text" value={query} maxLength={160} autoComplete="off"
-            placeholder="e.g. I want to compare the top 3 fund providers in NZ" onChange={(e) => setQuery(e.target.value)} />
-          <button type="submit" className="wizard-button">Compare</button>
-        </div>
-        <div className="fc-query-examples" aria-label="Examples">
-          {QUERY_EXAMPLES.map((x) => <button type="button" key={x} onClick={() => { setQuery(x); runQuery(x); }}>{x}</button>)}
-        </div>
-        <small>Works for New Zealand, Australia, the US, the UK and the Philippines. Say &quot;top&quot; (highest published past return),
-          &quot;cheapest&quot; (lowest fees), a number from 2 to 4, and optionally a fund type (conservative, balanced, growth, aggressive).</small>
-        {queryNote && <p className="fc-query-note" role="status">{queryNote}</p>}
-      </form>
-
-      <div className="comparison-controls">
-        <div className="comparison-common">
-          <NumberField id="fc-start" label="Current balance" value={startBalance} step={1000} unit={cur} onChange={setStartBalance} />
-          <NumberField id="fc-salary" label={country === 'UK' ? 'Salary (contributions use £6,240–£50,270 of it)' : 'Salary before tax'} value={salary} step={1000} unit={`${cur} / year`} onChange={setSalary} />
-          <NumberField id="fc-salary-growth" label="Salary growth" value={salaryGrowthPct} step={0.5} unit="% / year" onChange={setSalaryGrowthPct} />
-          <NumberField id="fc-employee" label={country === 'PH' ? 'Your PERA contribution' : 'Your contribution'} value={employeePct} step={0.5} unit="% of salary" onChange={setEmployeePct} />
-          <NumberField id="fc-employer" label={d.employerLabel} value={employerPct} step={0.5} unit="% of salary" onChange={setEmployerPct} />
-          <NumberField id="fc-extra" label="Extra voluntary contribution" value={extraMonthly} step={50} unit={`${cur} / month`} onChange={setExtraMonthly} />
-          <NumberField id="fc-years" label="Years to compare" value={years} step={1} unit="years" onChange={setYears} />
-          <NumberField id="fc-inflation" label="Inflation" value={inflationPct} step={0.1} unit="% / year" onChange={setInflationPct} />
+      <section className="fc-step" id="fc-step-1" aria-labelledby="fc-step-1-title" tabIndex={-1}>
+        <h3 id="fc-step-1-title"><span className="fc-step-num" aria-hidden="true">1</span> Your details</h3>
+        <div className="comparison-common fc-essentials">
+          <NumberField id="fc-start" label={`Current ${d.label} balance`} value={startBalance} step={1000} unit={cur} onChange={setStartBalance} hint={HINTS[country].balance} />
+          <NumberField id="fc-salary" label="Salary before tax" value={salary} step={1000} unit={`${cur} a year`} onChange={setSalary}
+            hint={country === 'UK' ? `From your payslip or contract. Contributions use the part between £${UK_QUALIFYING_LOWER.toLocaleString()} and £${UK_QUALIFYING_UPPER.toLocaleString()}.` : 'From your payslip or employment contract.'} />
+          <NumberField id="fc-employee" label={country === 'PH' ? 'Your PERA contribution' : 'Your contribution'} value={employeePct} step={0.5} unit="% of salary" onChange={setEmployeePct} hint={HINTS[country].contribution} />
+          <NumberField id="fc-employer" label={d.employerLabel} value={employerPct} step={0.5} unit="% of salary" onChange={setEmployerPct} hint={HINTS[country].employer} />
+          <NumberField id="fc-years" label="Years to compare" value={years} step={1} unit="years" onChange={setYears} hint="Usually the years until you retire." />
           {country === 'NZ' && (
-            <>
-              <label className="comparison-field" htmlFor="fc-pir"><span>Your PIR (tax rate)</span>
-                <select id="fc-pir" className="planner-select" value={nzPir} onChange={(e) => setNzPir(Number(e.target.value))}>
-                  <option value={10.5}>10.5%</option><option value={17.5}>17.5%</option><option value={28}>28%</option>
-                </select>
-              </label>
-              <label className="fc-check"><input type="checkbox" checked={nzGov} onChange={(e) => setNzGov(e.target.checked)} /> Include the government contribution</label>
-            </>
+            <div className="comparison-field">
+              <label htmlFor="fc-pir">Your PIR (tax rate on KiwiSaver)</label>
+              <select id="fc-pir" className="planner-select" value={nzPir} onChange={(e) => setNzPir(Number(e.target.value))} aria-describedby="fc-pir-hint">
+                <option value={10.5}>10.5%</option><option value={17.5}>17.5%</option><option value={28}>28%</option>
+              </select>
+              <small className="fc-field-hint" id="fc-pir-hint">Shown in myIR. Most people earning over $53,500 are on 28%.</small>
+            </div>
           )}
           {country === 'US' && (
-            <label className="comparison-field" htmlFor="fc-us"><span>Account type</span>
-              <select id="fc-us" className="planner-select" value={usAccount} onChange={(e) => setUsAccount(e.target.value as UsAccount)}>
+            <div className="comparison-field">
+              <label htmlFor="fc-us">Account type</label>
+              <select id="fc-us" className="planner-select" value={usAccount} onChange={(e) => setUsAccount(e.target.value as UsAccount)} aria-describedby="fc-us-hint">
                 <option value="traditional">Traditional 401(k) / IRA (taxed when withdrawn)</option>
                 <option value="roth">Roth 401(k) / IRA (tax-free withdrawals)</option>
                 <option value="taxable">Taxable brokerage account</option>
               </select>
-            </label>
+              <small className="fc-field-hint" id="fc-us-hint">Shown on your plan website or statement.</small>
+            </div>
           )}
-          <label className="comparison-field" htmlFor="fc-source"><span>Returns to use</span>
-            <select id="fc-source" className="planner-select" value={returnSource} onChange={(e) => switchSource(e.target.value as ReturnSource)}>
-              <option value="historic">Each fund&apos;s published past return (5-year where available)</option>
-              <option value="long-term">The same long-term return for each risk level (compares fees and tax only)</option>
-            </select>
-          </label>
-          {country === 'UK' && <small className="fc-hint">Contributions use qualifying earnings between £{UK_QUALIFYING_LOWER.toLocaleString()} and £{UK_QUALIFYING_UPPER.toLocaleString()}.</small>}
         </div>
+        <details className="fc-more">
+          <summary>Optional settings <small>(salary growth, extra contributions, inflation, which returns to use)</small></summary>
+          <div className="comparison-common">
+            <NumberField id="fc-salary-growth" label="Salary growth" value={salaryGrowthPct} step={0.5} unit="% a year" onChange={setSalaryGrowthPct} hint="Pay rises you expect on average. 2–3% is typical." />
+            <NumberField id="fc-extra" label="Extra voluntary contribution" value={extraMonthly} step={50} unit={`${cur} a month`} onChange={setExtraMonthly} hint="Anything you pay in on top of your salary contributions." />
+            <NumberField id="fc-inflation" label="Inflation" value={inflationPct} step={0.1} unit="% a year" onChange={setInflationPct} hint="Used only for the “in today’s money” figures." />
+            {country === 'NZ' && (
+              <div className="comparison-field fc-check-field">
+                <label className="fc-check"><input type="checkbox" checked={nzGov} onChange={(e) => setNzGov(e.target.checked)} /> Include the government contribution</label>
+                <small className="fc-field-hint">Up to $260.72 a year if you contribute at least $1,042.86 and earn under $180,000.</small>
+              </div>
+            )}
+            <div className="comparison-field">
+              <label htmlFor="fc-source">Returns to use</label>
+              <select id="fc-source" className="planner-select" value={returnSource} onChange={(e) => switchSource(e.target.value as ReturnSource)} aria-describedby="fc-source-hint">
+                <option value="historic">Each fund&apos;s published past return</option>
+                <option value="long-term">The same long-term return for each fund type</option>
+              </select>
+              <small className="fc-field-hint" id="fc-source-hint">Choose the second option to compare fees and tax only, because past returns don&apos;t repeat reliably.</small>
+            </div>
+          </div>
+        </details>
+      </section>
+
+      <section className="fc-step" id="fc-step-2" aria-labelledby="fc-step-2-title" tabIndex={-1}>
+        <h3 id="fc-step-2-title"><span className="fc-step-num" aria-hidden="true">2</span> Choose funds to compare</h3>
+        <form className="fc-query" role="search" aria-label="Pick funds by typing a request" onSubmit={(e) => { e.preventDefault(); if (query.trim()) runQuery(query); }}>
+          <label htmlFor="fc-query-input">Quick pick: type what you want to compare</label>
+          <div className="fc-query-row">
+            <input id="fc-query-input" type="text" value={query} maxLength={160} autoComplete="off" aria-describedby="fc-query-hint"
+              placeholder="e.g. compare the top 3 providers in NZ" onChange={(e) => setQuery(e.target.value)} />
+            <button type="submit" className="wizard-button">Compare</button>
+          </div>
+          <small id="fc-query-hint">Name a country, a number from 2 to 4, &quot;top&quot; (highest past return) or &quot;cheapest&quot; (lowest fees), and optionally a fund type.</small>
+          <div className="fc-query-examples" role="group" aria-label="Example requests">
+            {QUERY_EXAMPLES.map((x) => <button type="button" key={x} onClick={() => { setQuery(x); runQuery(x); }}>{x}</button>)}
+          </div>
+          {queryNote && <p className="fc-query-note" role="status">{queryNote}</p>}
+        </form>
+        <p className="fc-or">Or pick each fund yourself:</p>
 
         <div className="comparison-options">
           {options.map((o, index) => {
             const f = providers.find((x) => x.id === o.choice);
+            const title = ranked ? `Ranked #${index + 1}` : index === 0 ? 'Your current fund' : `Fund ${index + 1} to compare`;
             return (
               <fieldset className="comparison-option" key={o.id} style={{ '--option-color': COLORS[index] } as CSSProperties}>
-                <legend><span>{String(index + 1).padStart(2, '0')}</span> {ranked ? `Ranked #${index + 1}` : index === 0 ? 'Your current fund' : 'Fund to compare'}</legend>
-                <label className="comparison-field" htmlFor={`${o.id}-provider`}>
-                  <span>Provider and fund</span>
+                <legend><span aria-hidden="true">{String(index + 1).padStart(2, '0')}</span> {title}</legend>
+                <div className="comparison-field">
+                  <label htmlFor={`${o.id}-provider`}>Provider and fund</label>
                   <select id={`${o.id}-provider`} className="planner-select" value={o.choice} onChange={(e) => { choose(o.id, e.target.value); if (index === 0) setRanked(false); }}>
                     {byProvider.map(([provider, funds]) => (
                       <optgroup key={provider} label={provider}>
@@ -482,61 +645,74 @@ export default function FundComparison({ initialQuery }: { initialQuery?: { text
                     ))}
                     <option value={CUSTOM}>Other: enter my own provider…</option>
                   </select>
-                </label>
+                </div>
                 {o.choice === CUSTOM && (
-                  <label className="comparison-field" htmlFor={`${o.id}-name`}>
-                    <span>Provider and fund name</span>
+                  <div className="comparison-field">
+                    <label htmlFor={`${o.id}-name`}>Provider and fund name</label>
                     <input id={`${o.id}-name`} value={o.name} maxLength={80} placeholder="e.g. NZ Funds Growth Strategy"
                       onChange={(e) => update(o.id, { name: e.target.value })} />
-                  </label>
+                  </div>
                 )}
+                <p className="fc-fund-summary">
+                  <span><b>Fees</b> {totalFeePct(o).toFixed(2)}% a year{o.fixedFeePerYear ? ` + ${money(o.fixedFeePerYear)}` : ''}{o.contributionChargePct ? ` + ${o.contributionChargePct}% of contributions` : ''}</span>
+                  <span><b>Return used</b> {Number.isFinite(o.grossReturnPct) ? o.grossReturnPct : '?'}% a year before fees and tax</span>
+                  <span><b>Type</b> {o.risk}</span>
+                </p>
                 {f ? (
                   <p className="fc-source">
                     <span className={`fc-badge is-${f.confidence}`}>{f.confidence === 'sourced' ? 'Published figures' : 'Typical figures: check'}</span>{' '}
                     {f.historicReturnPct !== undefined
-                      ? <>Past return {f.historicReturnPct}% a year over {f.historicYears} year{f.historicYears === 1 ? '' : 's'} ({f.returnBasis?.replace(/-/g, ' ')}). </>
-                      : <>No published past return here: using the long-term {f.risk} assumption. </>}
-                    <a href={f.sourceUrl} target="_blank" rel="noopener noreferrer">{f.sourceLabel} ↗</a>, as at {f.asOf}.
-                    <br /><em>{f.feeHow}</em>{f.note && <> {f.note}</>}
+                      ? <>Past return {f.historicReturnPct}% a year over {f.historicYears} year{f.historicYears === 1 ? '' : 's'}, after fees{f.returnBasis === 'after-fees-after-tax' ? ' and tax' : ''}. </>
+                      : <>No published past return: using a typical long-term return for a {f.risk} fund. </>}
+                    Source: <a href={f.sourceUrl} target="_blank" rel="noopener noreferrer">{f.sourceLabel}<span className="sr-only"> (opens in a new tab)</span></a>, {f.asOf}.
                   </p>
                 ) : (
-                  <p className="fc-source">Enter the fees from the fund&apos;s latest fund update, fact sheet or fee disclosure.</p>
+                  <p className="fc-source">Enter the fees from the fund&apos;s latest fund update, fact sheet or fee disclosure below.</p>
                 )}
-                <div className="comparison-fees-grid">
-                  <NumberField id={`${o.id}-ret`} label="Return before fees and tax" value={o.grossReturnPct} step={0.25} unit="% / year" min={-10} onChange={(v) => update(o.id, { grossReturnPct: v })} />
-                  <label className="comparison-field" htmlFor={`${o.id}-risk`}><span>Fund type</span>
-                    <select id={`${o.id}-risk`} className="planner-select" value={o.risk} onChange={(e) => update(o.id, { risk: e.target.value as FundRisk })}>
-                      <option value="conservative">Conservative</option><option value="balanced">Balanced</option><option value="growth">Growth</option><option value="aggressive">Aggressive / high growth</option>
-                    </select>
-                  </label>
-                  <NumberField id={`${o.id}-inv`} label="Fund / investment fee" value={o.investmentFeePct} step={0.05} unit="% / year" onChange={(v) => update(o.id, { investmentFeePct: v })} />
-                  <NumberField id={`${o.id}-perf`} label="Performance fee (estimate)" value={o.performanceFeePct} step={0.05} unit="% / year" onChange={(v) => update(o.id, { performanceFeePct: v })} />
-                  <NumberField id={`${o.id}-admin`} label="Admin fee" value={o.adminFeePct} step={0.05} unit="% / year" onChange={(v) => update(o.id, { adminFeePct: v })} />
-                  <NumberField id={`${o.id}-fixed`} label="Fixed member / admin fee" value={o.fixedFeePerYear} step={1} unit={`${cur} / year`} onChange={(v) => update(o.id, { fixedFeePerYear: v })} />
-                  {(country === 'UK' || o.platformFeePct > 0) && (
-                    <>
-                      <NumberField id={`${o.id}-plat`} label="Platform fee" value={o.platformFeePct} step={0.05} unit="% / year" onChange={(v) => update(o.id, { platformFeePct: v })} />
-                      <NumberField id={`${o.id}-cap`} label="Platform fee cap (0 = none)" value={o.platformFeeCapPerYear} step={5} unit={`${cur} / year`} onChange={(v) => update(o.id, { platformFeeCapPerYear: v })} />
-                    </>
-                  )}
-                  <NumberField id={`${o.id}-charge`} label="Charge on each contribution" value={o.contributionChargePct} step={0.1} unit="%" onChange={(v) => update(o.id, { contributionChargePct: v })} />
-                  {country === 'NZ' && <NumberField id={`${o.id}-growth`} label="Growth assets (for PIE tax)" value={o.growthSharePct} step={5} unit="%" onChange={(v) => update(o.id, { growthSharePct: v })} />}
-                </div>
+                <details className="fc-fees" open={o.choice === CUSTOM}>
+                  <summary>Check or change this fund&apos;s fees and return</summary>
+                  {f && <p className="fc-field-hint">{f.feeHow}{f.note && <> {f.note}</>}</p>}
+                  <div className="comparison-fees-grid">
+                    <NumberField id={`${o.id}-ret`} label="Return before fees and tax" value={o.grossReturnPct} step={0.25} unit="% a year" min={-10} onChange={(v) => update(o.id, { grossReturnPct: v })}
+                      hint="Lower it to test a weaker future. Negative numbers are allowed." />
+                    <div className="comparison-field">
+                      <label htmlFor={`${o.id}-risk`}>Fund type</label>
+                      <select id={`${o.id}-risk`} className="planner-select" value={o.risk} onChange={(e) => update(o.id, { risk: e.target.value as FundRisk })}>
+                        <option value="conservative">Conservative</option><option value="balanced">Balanced</option><option value="growth">Growth</option><option value="aggressive">Aggressive / high growth</option>
+                      </select>
+                    </div>
+                    <NumberField id={`${o.id}-inv`} label="Fund / investment fee" value={o.investmentFeePct} step={0.05} unit="% a year" onChange={(v) => update(o.id, { investmentFeePct: v })} hint="In the fund update or product disclosure statement." />
+                    <NumberField id={`${o.id}-perf`} label="Performance fee (estimate)" value={o.performanceFeePct} step={0.05} unit="% a year" onChange={(v) => update(o.id, { performanceFeePct: v })} />
+                    <NumberField id={`${o.id}-admin`} label="Admin fee" value={o.adminFeePct} step={0.05} unit="% a year" onChange={(v) => update(o.id, { adminFeePct: v })} />
+                    <NumberField id={`${o.id}-fixed`} label="Fixed member / admin fee" value={o.fixedFeePerYear} step={1} unit={`${cur} a year`} onChange={(v) => update(o.id, { fixedFeePerYear: v })} />
+                    {(country === 'UK' || o.platformFeePct > 0) && (
+                      <>
+                        <NumberField id={`${o.id}-plat`} label="Platform fee" value={o.platformFeePct} step={0.05} unit="% a year" onChange={(v) => update(o.id, { platformFeePct: v })} />
+                        <NumberField id={`${o.id}-cap`} label="Platform fee cap (0 = none)" value={o.platformFeeCapPerYear} step={5} unit={`${cur} a year`} onChange={(v) => update(o.id, { platformFeeCapPerYear: v })} />
+                      </>
+                    )}
+                    <NumberField id={`${o.id}-charge`} label="Charge on each contribution" value={o.contributionChargePct} step={0.1} unit="%" onChange={(v) => update(o.id, { contributionChargePct: v })} />
+                    {country === 'NZ' && <NumberField id={`${o.id}-growth`} label="Growth assets (for PIE tax)" value={o.growthSharePct} step={5} unit="%" onChange={(v) => update(o.id, { growthSharePct: v })} hint="The share in shares and property, from the fund update." />}
+                  </div>
+                </details>
                 {options.length > 2 && (
-                  <button type="button" className="comparison-remove" onClick={() => setOptions((cur) => cur.filter((x) => x.id !== o.id))}>Remove this fund</button>
+                  <button type="button" className="comparison-remove" onClick={() => setOptions((cur) => cur.filter((x) => x.id !== o.id))}>Remove {o.name || title}</button>
                 )}
               </fieldset>
             );
           })}
           {options.length < 4 && <button type="button" className="comparison-add" onClick={addOption}>+ Add another fund</button>}
         </div>
-      </div>
+      </section>
 
+      <section className="fc-step" id="fc-step-3" aria-labelledby="fc-step-3-title" tabIndex={-1}>
+      <h3 id="fc-step-3-title"><span className="fc-step-num" aria-hidden="true">3</span> Results</h3>
+      <p className="sr-only" role="status" aria-live="polite">{liveSummary}</p>
       {result ? (
-        <div className="comparison-results" aria-live="polite">
-          <div className="fc-granularity" role="radiogroup" aria-label="Show the projection">
+        <div className="comparison-results">
+          <div className="fc-granularity" role="group" aria-label="Show charts by">
             {(['monthly', 'quarterly', 'yearly'] as Gran[]).map((g) => (
-              <button key={g} type="button" role="radio" aria-checked={granularity === g} className={granularity === g ? 'is-on' : ''} onClick={() => setGranularity(g)}>
+              <button key={g} type="button" aria-pressed={granularity === g} className={granularity === g ? 'is-on' : ''} onClick={() => setGranularity(g)}>
                 {g === 'monthly' ? 'Monthly' : g === 'quarterly' ? 'Quarterly' : 'Annual'}
               </button>
             ))}
@@ -564,7 +740,7 @@ export default function FundComparison({ initialQuery }: { initialQuery?: { text
           {result.funds.map((f, i) => <FundPanel key={f.id} fund={f} color={COLORS[i]} granularity={granularity} money={money} cur={cur} />)}
 
           <section className="fc-decision" aria-labelledby="fc-decision-title">
-            <h3 id="fc-decision-title">Stay or move? What these numbers say</h3>
+            <h4 id="fc-decision-title">Stay or move? What these numbers say</h4>
             {current && result.funds.length > 1 && (
               <ul>
                 {result.funds.slice(1).map((f) => {
@@ -588,7 +764,7 @@ export default function FundComparison({ initialQuery }: { initialQuery?: { text
             <p><strong>Rules of thumb:</strong> a fee gap of 0.5% a year often costs more than 10% of your final balance over 25+ years; but the
               right risk level for your time frame, and staying invested through downturns, usually matter even more than fees. A fund that
               charges more is only worth it if it consistently earns more after fees for the same risk.</p>
-            <h4>Before you decide in {COUNTRIES[country].name}</h4>
+            <h5>Before you decide in {COUNTRIES[country].name}</h5>
             <ul>{CHECKLIST[country].map((c) => <li key={c}>{c}</li>)}</ul>
             <p className="fc-hint">Ask the library below about any of these numbers, for example &quot;Why does my current fund cost more in tax?&quot;.
               General information, not financial advice; for a personal recommendation talk to {COUNTRIES[country].adviser}.</p>
@@ -599,7 +775,8 @@ export default function FundComparison({ initialQuery }: { initialQuery?: { text
             <ul>{result.rules.map((r) => <li key={r}>{r}</li>)}</ul>
           </details>
         </div>
-      ) : <p className="comparison-error" role="status">Check the balances, contribution rates, returns and fees.</p>}
+      ) : <p className="comparison-error" role="alert">Some boxes are empty or not numbers. Check the balance, contribution rates, years (1 to 60), returns and fees.</p>}
+      </section>
     </section>
   );
 }

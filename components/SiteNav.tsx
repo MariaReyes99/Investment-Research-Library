@@ -4,7 +4,7 @@ export type NavKey = 'ask' | 'calculator' | 'pricing' | 'about' | 'methodology' 
 
 const LINKS: { href: string; label: string; key: NavKey }[] = [
   { href: '/', label: 'Ask the library', key: 'ask' },
-  { href: '/?tab=numbers', label: 'My numbers', key: 'calculator' },
+  { href: '/?tab=numbers', label: 'My financial numbers', key: 'calculator' },
   { href: '/methodology', label: 'Methodology', key: 'methodology' },
   { href: '/sources', label: 'Sources', key: 'sources' },
   { href: '/about', label: 'About & privacy', key: 'about' },
@@ -12,7 +12,7 @@ const LINKS: { href: string; label: string; key: NavKey }[] = [
 
 /**
  * The main menu, shown on every page so people never lose their way.
- * On the library page, "Ask" and "My numbers" switch tabs instead of navigating (onTab).
+ * On the library page, "Ask" and "My financial numbers" switch tabs instead of navigating (onTab).
  */
 export default function SiteNav({ current, onTab }: { current: NavKey; onTab?: (tab: 'ask' | 'numbers') => void }) {
   return (

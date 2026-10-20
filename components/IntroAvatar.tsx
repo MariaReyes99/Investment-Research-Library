@@ -38,14 +38,14 @@ const SCENES: Scene[] = [
     points: ['Strengths and weaknesses', 'Risks to watch', 'Levers to explore', 'Emergency fund check'],
   },
   {
-    icon: '📚', title: 'Ask about your numbers',
-    line: "The library and your numbers are on one page. Ask questions in plain words and get answers with sources you can check. The library can see your plan and fund comparison, so you can ask what your numbers mean and how to improve them.",
-    points: ['Plain-English answers', 'Sources you can check', 'Sees your plan and comparison'],
+    icon: '📚', title: 'Ask about your financial numbers',
+    line: "The library and your financial numbers are on one page. Ask questions in plain words and get answers with sources you can check. The library sees your plan and your fund comparison, so it can explain your overall picture, the costs of reaching your money, and the tax rules across countries.",
+    points: ['Answers with sources', 'Your overall picture', 'Costs and cross-border tax'],
   },
   {
-    icon: '⚖️', title: 'Stay or move providers?', mood: 'point',
-    line: "Compare KiwiSaver, super or pension providers, or just type 'compare the top 3 providers in New Zealand'. Each fund shows what you paid in plus its return, minus tax and fees, to give your balance.",
-    points: ['Latest published fees', 'Type a quick request', 'Gross − drag = your balance', '5 countries'],
+    icon: '⚖️', title: 'Retirement fund comparison', mood: 'point',
+    line: "Compare your KiwiSaver, super or pension in three simple steps: enter your details, choose the funds, then read the results. Hints under each box show where to find your numbers, or just type 'compare the top 3 providers in New Zealand'.",
+    points: ['1. Your details', '2. Choose funds', '3. Read the results', 'Hints under every box'],
   },
   {
     icon: '🔒', title: 'Private and safe',

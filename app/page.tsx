@@ -30,11 +30,14 @@ const INCLUDE_KEY = 'irl:include-plan';
 
 /** Questions people ask once their numbers are in. */
 const NUMBER_QUESTIONS = [
-  'What do my numbers mean, in plain words?',
+  'What is my overall financial picture, combining my plan and my fund comparison?',
   'Where could I improve my plan to retire comfortably?',
+  'What will it cost me in tax and fees to access my retirement money?',
+  'What do my numbers mean, in plain words?',
   'Am I on track compared with the 4% rule?',
-  'Should I stay with my KiwiSaver or super provider, or move? Explain the fee and tax differences.',
+  'Should I stay with my retirement fund provider, or move? Explain the fee and tax differences.',
   'What are the biggest risks in my plan, and how could we reduce them as a couple?',
+  'Which tax rules apply if I retire in another country or move my retirement savings?',
 ];
 
 type Source = {
@@ -98,7 +101,7 @@ const ProjectionFromArgs = memo(function ProjectionFromArgs({ args, country: sel
       <MilestoneTable result={data.result} country={country} />
       <HouseholdAnalysisView analysis={data.analysis} country={country} />
       <p className="projection-note">
-        <a href={projectorLink(data.household)} onClick={(e) => { e.preventDefault(); openPlanLink(projectorLink(data.household)); }}>Open these numbers in My numbers</a> to add income, property,
+        <a href={projectorLink(data.household)} onClick={(e) => { e.preventDefault(); openPlanLink(projectorLink(data.household)); }}>Open these numbers in My financial numbers</a> to add income, property,
         pensions and more, privately on your device.
       </p>
     </details>
@@ -127,7 +130,7 @@ const HouseholdFromArgs = memo(function HouseholdFromArgs({ args }: { args: unkn
       <HouseholdComparison result={result} />
       <HouseholdAnalysisView analysis={analysis} country={result.inputs.country} />
       <p className="projection-note">
-        <a href={projectorLink(args as HouseholdInput)} onClick={(e) => { e.preventDefault(); openPlanLink(projectorLink(args as HouseholdInput)); }}>Open these numbers in My numbers</a> to change them privately on your device.
+        <a href={projectorLink(args as HouseholdInput)} onClick={(e) => { e.preventDefault(); openPlanLink(projectorLink(args as HouseholdInput)); }}>Open these numbers in My financial numbers</a> to change them privately on your device.
       </p>
     </details>
   );
@@ -162,7 +165,7 @@ export default function Page() {
   const [tab, setTab] = useState<Tab>('ask');
   const [numbersOpened, setNumbersOpened] = useState(false);
   const [projectorKey, setProjectorKey] = useState(0);
-  // A projection in a chat answer was opened: show it in "My numbers" without leaving the page
+  // A projection in a chat answer was opened: show it in "My financial numbers" without leaving the page
   useEffect(() => {
     const open = () => { setTab('numbers'); setNumbersOpened(true); setProjectorKey((k) => k + 1); window.scrollTo({ top: 0 }); };
     window.addEventListener('irl:open-plan', open);
@@ -176,7 +179,15 @@ export default function Page() {
     window.history.replaceState(null, '', url.pathname + url.search + url.hash);
     window.scrollTo({ top: 0 });
   };
-  // Open "My numbers" when arriving from an old /calculator link or a "plan" link
+  // Arrow keys, Home and End move between the two tabs (WAI-ARIA tabs pattern)
+  const onTabKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+    e.preventDefault();
+    const next: Tab = e.key === 'Home' ? 'ask' : e.key === 'End' ? 'numbers' : tab === 'ask' ? 'numbers' : 'ask';
+    openTab(next);
+    requestAnimationFrame(() => document.getElementById(next === 'ask' ? 'tab-ask' : 'tab-numbers')?.focus());
+  };
+  // Open "My financial numbers" when arriving from an old /calculator link or a "plan" link
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('tab') === 'numbers' || params.get('view') === 'full' || window.location.hash.startsWith('#plan=')) {
@@ -255,7 +266,7 @@ export default function Page() {
           <button type="button" className="corpus-entry corpus-button" onClick={() => openTab(tab === 'numbers' ? 'ask' : 'numbers')}>
             <span className="corpus-glyph" aria-hidden="true">$</span>
             <span>
-              <strong>{tab === 'numbers' ? 'Back to the library' : 'My numbers'}</strong>
+              <strong>{tab === 'numbers' ? 'Back to the library' : 'My financial numbers'}</strong>
               <small>{tab === 'numbers' ? 'Ask about your plan' : 'Wealth projector and fund comparison'}</small>
             </span>
             <span className="ready-dot" aria-hidden="true" />
@@ -297,25 +308,35 @@ export default function Page() {
           <RetireInSelect id="chat-retire-in-mobile" value={retireIn && retireIn !== country ? retireIn : null} livesIn={country} onChange={setRetireIn} />
         </div>
 
-        <div className="workspace-tabs" role="tablist" aria-label="Library or my numbers">
-          <button type="button" role="tab" aria-selected={tab === 'ask'} className={tab === 'ask' ? 'is-on' : ''} onClick={() => openTab('ask')}>
-            💬 Ask the library {includePlan && (projectorPlan || comparisonSummary) && <small>· linked to my numbers</small>}
+        <div id="main-content" tabIndex={-1} className="workspace-tabs" role="tablist" aria-label="Library or my financial numbers" onKeyDown={onTabKey}>
+          <button type="button" role="tab" id="tab-ask" aria-controls="panel-ask" tabIndex={tab === 'ask' ? 0 : -1} aria-selected={tab === 'ask'} className={tab === 'ask' ? 'is-on' : ''} onClick={() => openTab('ask')}>
+            💬 Ask the library {includePlan && (projectorPlan || comparisonSummary) && <small>· linked to my financial numbers</small>}
           </button>
-          <button type="button" role="tab" aria-selected={tab === 'numbers'} className={tab === 'numbers' ? 'is-on' : ''} onClick={() => openTab('numbers')}>
-            📊 My numbers <small>· wealth projector and fund comparison</small>
+          <button type="button" role="tab" id="tab-numbers" aria-controls="panel-numbers" tabIndex={tab === 'numbers' ? 0 : -1} aria-selected={tab === 'numbers'} className={tab === 'numbers' ? 'is-on' : ''} onClick={() => openTab('numbers')}>
+            📊 My financial numbers <small>· wealth projector and retirement fund comparison</small>
           </button>
         </div>
 
         {numbersOpened && (
-          <div className="numbers-panel" hidden={tab !== 'numbers'}>
-            <h1 className="page-title">My numbers</h1>
+          <div className="numbers-panel" id="panel-numbers" role="tabpanel" aria-labelledby="tab-numbers" hidden={tab !== 'numbers'}>
+            <h1 className="page-title">My financial numbers</h1>
             <p className="page-lede">
               See where your money could take you, on your own or as a couple. Your answers stay on this device; while
-              &quot;Include my numbers&quot; is on, the library uses them to explain what they mean and how you could improve them.
+              &quot;Include my financial numbers&quot; is on, the library uses them to explain what they mean and how you could improve them.
             </p>
-            <div className="ask-about-numbers">
-              <strong>Ask the library about these numbers:</strong>
-              {NUMBER_QUESTIONS.map((q) => <button key={q} type="button" className="suggestion-chip" onClick={() => askAbout(q)}>{q}</button>)}
+            <p className={`link-status${includePlan ? ' is-on' : ''}`} role="status">
+              <span>🔗 Linked to the library:</span>
+              <span className={projectorPlan ? 'is-yes' : 'is-no'}>{projectorPlan ? '✓' : '○'} Wealth projector plan{projectorPlan ? '' : ' (not set up yet)'}</span>
+              <span className={comparisonSummary ? 'is-yes' : 'is-no'}>{comparisonSummary ? '✓' : '○'} Retirement fund comparison{comparisonSummary ? '' : ' (not set up yet)'}</span>
+              {!includePlan && <button type="button" className="link-button" onClick={() => setIncludePlan(true)}>Turn linking on</button>}
+            </p>
+            <div className="ask-about-numbers" role="group" aria-labelledby="ask-numbers-label">
+              <strong id="ask-numbers-label">Ask the library about these numbers:</strong>
+              {NUMBER_QUESTIONS.slice(0, 3).map((q) => <button key={q} type="button" className="suggestion-chip" onClick={() => askAbout(q)}>{q}</button>)}
+              <details className="more-questions">
+                <summary>More questions</summary>
+                {NUMBER_QUESTIONS.slice(3).map((q) => <button key={q} type="button" className="suggestion-chip" onClick={() => askAbout(q)}>{q}</button>)}
+              </details>
             </div>
             <p><a className="guide-link" href="/calculator/guide">Need help? Read the step-by-step guide →</a></p>
             <ProjectorShell key={projectorKey} />
@@ -328,7 +349,7 @@ export default function Page() {
           </div>
         )}
 
-        <div className="conversation-column" hidden={tab !== 'ask'}>
+        <div className="conversation-column" id="panel-ask" role="tabpanel" aria-labelledby="tab-ask" hidden={tab !== 'ask'}>
           {messages.length === 0 ? (
             <section className="welcome-panel" aria-labelledby="welcome-title">
               <div className="welcome-seal" aria-hidden="true"><span>RL</span></div>
@@ -449,7 +470,7 @@ export default function Page() {
                   <label className="plan-share-toggle">
                     <input type="checkbox" role="switch" checked={includePlan} onChange={(ev) => setIncludePlan(ev.target.checked)} />
                     <span className="plan-share-track" aria-hidden="true"><span /></span>
-                    <span>📎 Include my numbers (projector plan{comparisonSummary ? ' and fund comparison' : ''})</span>
+                    <span>📎 Include my financial numbers (projector plan{comparisonSummary ? ' and retirement fund comparison' : ''})</span>
                   </label>
                   <small>
                     {includePlan
@@ -460,9 +481,11 @@ export default function Page() {
                     <div className="plan-share-ideas">
                       {[
                         'What do my numbers mean, in plain words?',
+                        ...(projectorPlan && comparisonSummary ? ['What is my overall financial picture?'] : []),
                         'Where could I improve my plan?',
-                        'Review my plan against well-known investing principles',
-                        ...(comparisonSummary ? ['Should I stay with my current fund or move?'] : []),
+                        ...(comparisonSummary ? ['Should I stay with my current fund or move?', 'What will it cost me to access my money?'] : []),
+                        'What tax rules apply across the countries in my plan?',
+                        'What are the biggest future risks to my retirement?',
                       ].map((q) => (
                         <button key={q} type="button" className="suggestion-chip" onClick={() => setInput(q)}>{q}</button>
                       ))}
@@ -470,7 +493,7 @@ export default function Page() {
                   )}
                 </>
               ) : (
-                <small>Want answers about your own numbers? <button type="button" className="link-button" onClick={() => openTab('numbers')}>Fill in My numbers</button> and the library will use them automatically.</small>
+                <small>Want answers about your own numbers? <button type="button" className="link-button" onClick={() => openTab('numbers')}>Fill in My financial numbers</button> and the library will use them automatically.</small>
               )}
             </div>
             {privacyNotice && (

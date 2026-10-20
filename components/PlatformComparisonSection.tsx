@@ -1,10 +1,11 @@
 'use client';
 /** Retirement fund and platform comparisons, hidden until someone chooses to explore them. */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import PlatformComparison from './PlatformComparison';
 import FundComparison from './FundComparison';
 import { useCountry } from './CountryPicker';
 import { COUNTRY_DEFAULTS } from '../lib/finance/fund-comparison';
+import { hasSavedComparison } from '../lib/comparisonShare';
 
 export default function PlatformComparisonSection({ startOpen = false }: { startOpen?: boolean }) {
   const [open, setOpen] = useState(startOpen);
@@ -17,6 +18,8 @@ export default function PlatformComparisonSection({ startOpen = false }: { start
     setMode('funds');
     setOpen(true);
   };
+  // Reopen a comparison saved on this device
+  useEffect(() => { if (hasSavedComparison()) setOpen(true); }, []);
   const [country] = useCountry();
   const label = COUNTRY_DEFAULTS[country].label;
   return (
@@ -24,11 +27,11 @@ export default function PlatformComparisonSection({ startOpen = false }: { start
       <div className="platform-explorer-intro">
         <span aria-hidden="true">⚖️</span>
         <div>
-          <h2 id="platform-explorer-title">Compare {label} providers and investment platforms</h2>
+          <h2 id="platform-explorer-title">Retirement fund comparison</h2>
+          <p className="fc-also-known">KiwiSaver · Superannuation · 401(k) and IRA · Workplace and personal pensions · PERA and Pag-IBIG MP2</p>
           <p>
-            Thinking about staying with your {label} provider or moving? Fees and tax look small but add up over the years. Pick up
-            to four providers: their latest published fees and returns fill in automatically, and you can add any provider that
-            isn&apos;t listed. See your contributions, every fee and tax, and the return you keep, month by month or year by year.
+            Staying with your {['Super', 'Pension'].includes(label) ? label.toLowerCase() : label} provider or moving? Compare up to four funds in three simple steps.
+            Fees and returns fill in from each provider&apos;s latest published figures. Your comparison is saved on this device and linked to the library.
           </p>
         </div>
       </div>
@@ -43,15 +46,15 @@ export default function PlatformComparisonSection({ startOpen = false }: { start
         </form>
       )}
       <button type="button" className="wizard-button is-quiet" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        {open ? 'Hide the comparison' : 'Open the comparison'}
+        {open ? 'Hide the retirement fund comparison' : 'Open the retirement fund comparison'}
       </button>
       {open && (
         <>
-          <div className="projector-tabs fc-mode" role="tablist" aria-label="What to compare">
-            <button type="button" role="tab" aria-selected={mode === 'funds'} className={mode === 'funds' ? 'is-on' : ''} onClick={() => setMode('funds')}>
-              <span aria-hidden="true">🏦</span> {label} providers <small>Contributions, fees, tax and returns</small>
+          <div className="projector-tabs fc-mode" role="group" aria-label="What to compare">
+            <button type="button" aria-pressed={mode === 'funds'} className={mode === 'funds' ? 'is-on' : ''} onClick={() => setMode('funds')}>
+              <span aria-hidden="true">🏦</span> Retirement funds ({label}) <small>Contributions, fees, tax and returns</small>
             </button>
-            <button type="button" role="tab" aria-selected={mode === 'platforms'} className={mode === 'platforms' ? 'is-on' : ''} onClick={() => setMode('platforms')}>
+            <button type="button" aria-pressed={mode === 'platforms'} className={mode === 'platforms' ? 'is-on' : ''} onClick={() => setMode('platforms')}>
               <span aria-hidden="true">📈</span> Investment platforms <small>Brokers, ETFs and managed funds</small>
             </button>
           </div>

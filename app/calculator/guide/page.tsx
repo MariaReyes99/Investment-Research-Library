@@ -9,8 +9,8 @@ export default function ProjectorGuidePage() {
   return (
     <div className="page-shell">
       <SiteHeader current="calculator" />
-      <main className="page-main prose-page guide-page">
-        <p className="guide-back"><Link href="/?tab=numbers">← Back to My numbers</Link></p>
+      <main id="main-content" tabIndex={-1} className="page-main prose-page guide-page">
+        <p className="guide-back"><Link href="/?tab=numbers">← Back to My financial numbers</Link></p>
         <h1 className="page-title">How to fill in the wealth projector</h1>
         <p className="page-lede">
           Work down the form from top to bottom. You don&apos;t need every section: leave out anything that doesn&apos;t apply,
@@ -99,15 +99,21 @@ export default function ProjectorGuidePage() {
         <h3>10. Goal, comparisons and settings</h3>
         <p>Set a target net worth and the age you want to reach it. Use &quot;Compare return assumptions&quot; to see the same plan at, say, 4%, 6% and 8%. Under &quot;Inflation, reinvested savings and market swings&quot;, the defaults suit most people; raise &quot;Market ups and downs&quot; to 15 or more if most of your money is in shares.</p>
 
-        <h3>11. Compare KiwiSaver, super or pension providers</h3>
-        <p>Open &quot;📊 My numbers&quot; and choose <strong>Open the comparison</strong>. Pick your current fund first, then up to three others, or type a request such as &quot;compare the top 3 providers in NZ&quot; or &quot;cheapest 3 balanced super funds in Australia&quot;. Fees and past returns fill in from each provider&apos;s latest published figures; change any number to match your statement.</p>
+        <h3>11. Retirement fund comparison (KiwiSaver, super, 401(k)/IRA, pensions, PERA)</h3>
+        <p>Open &quot;📊 My financial numbers&quot; and choose <strong>Open the retirement fund comparison</strong>. It works in three steps:</p>
+        <ol>
+          <li><strong>Your details:</strong> your current balance, salary before tax, your contribution and your employer&apos;s (as a % of salary), and the years to compare. The hint under each box says where to find the number, for example your latest statement or payslip. &quot;Optional settings&quot; can stay as they are.</li>
+          <li><strong>Choose funds:</strong> pick your current fund first, then up to three others, or type a request such as &quot;compare the top 3 providers in NZ&quot;. Fees and past returns fill in from each provider&apos;s latest published figures. Open &quot;Check or change this fund&apos;s fees and return&quot; only if your statement shows different figures.</li>
+          <li><strong>Read the results:</strong> the table compares final balances, then each fund has four charts:</li>
+        </ol>
         <ul>
           <li><strong>A. Gross:</strong> starting balance, your, employer and government contributions, plus the return before tax and fees.</li>
           <li><strong>B. Drag:</strong> tax, admin fees and other fees taken out.</li>
           <li><strong>C. Net:</strong> what stays in your account. A − B = C, your balance.</li>
           <li><strong>D. Return each period:</strong> before and after drag. Return is earned on the whole balance, not just new contributions.</li>
         </ul>
-        <p>Switch between Monthly, Quarterly and Annual. Each fund&apos;s table says how every number was worked out, tagged with the chart it belongs to. Set &quot;Returns to use&quot; to the long-term option to compare fees and tax only, since past returns don&apos;t repeat reliably.</p>
+        <p>Switch between Monthly, Quarterly and Annual. Every fund&apos;s charts can also be shown as a year-by-year table (useful with a screen reader). Each fund&apos;s notes say how every number was worked out, tagged with the chart it belongs to. Set &quot;Returns to use&quot; to the long-term option to compare fees and tax only, since past returns don&apos;t repeat reliably.</p>
+        <p>Your comparison is saved on this device and linked to the library together with your projector plan, so you can ask, for example, &quot;What will it cost me to take my money out?&quot;. Choose <strong>↺ Start again</strong> to clear it and go back to the defaults.</p>
 
         <h2 id="life-events">What to change as life changes</h2>
         <p>Update your plan when something big changes. The table shows what to add, change or remove.</p>

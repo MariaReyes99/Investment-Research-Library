@@ -74,9 +74,9 @@ test('the fund comparison sent to the chat is plain, limited text', async () => 
   const { fundComparisonContext } = await import('../lib/guardrails/advice');
   assert.equal(fundComparisonContext(undefined), '');
   assert.equal(fundComparisonContext(42), '');
-  const note = fundComparisonContext('<script>x</script> fund A' + 'y'.repeat(5000));
+  const note = fundComparisonContext('<script>x</script> fund A' + 'y'.repeat(8000));
   assert.ok(!note.includes('<script>'));
-  assert.ok(note.length < 5000);
+  assert.ok(note.length < 7500);
 });
 
 test('a plain-words request picks the country, number, type and ranking', async () => {

@@ -3,7 +3,7 @@ import CalculatorRedirect from './CalculatorRedirect';
 
 export const metadata: Metadata = {
   title: 'Wealth projector · Investment Research Library',
-  description: 'The wealth projector now sits with the library, in the "My numbers" tab.',
+  description: 'The wealth projector now sits with the library, in the "My financial numbers" tab.',
 };
 
 /** The projector moved onto the library page. Old links (including #plan= links) still work. */
