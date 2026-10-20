@@ -28,7 +28,7 @@ The picker appears automatically once the `funds` list has entries.
 
 ## Retirement fund providers (KiwiSaver, super, 401(k)/IRA, pensions, PERA)
 
-The "Compare KiwiSaver providers" tool on the My numbers tab reads `data/retirement-providers.ts`.
+The "Retirement fund comparison" on the My financial numbers tab reads `data/retirement-providers.ts`.
 Each fund has its fees, how they are charged (`feeHow`), a historic return with its basis, a source
 link, an `asOf` date and a `confidence` of `sourced` or `indicative`. Review it every 3 months:
 
