@@ -4,7 +4,6 @@
  * entered here are never sent to the server. Saved plans stay in this browser.
  */
 import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { ZodIssue } from 'zod';
 import { CURRENCIES, HouseholdInputSchema, countryOfCurrency, projectHousehold, retirementCurrency, TAX_TREATMENTS, usedCurrencies, type Currency, type Household, type HouseholdResult } from '../lib/finance/household';
 import { planFromHash } from '../lib/finance/householdLink';
 import { analyseHousehold } from '../lib/finance/householdAnalysis';
@@ -18,6 +17,7 @@ import ClearDeviceData from './ClearDeviceData';
 import BufferCheck from './BufferCheck';
 import { usePlan } from './usePlan';
 import { canSavePlans } from '../lib/plans';
+import { friendlyPlanError } from '../lib/finance/planErrors';
 
 type Draft = Omit<Household, 'compare'> & { compare: NonNullable<Household['compare']> };
 
@@ -133,62 +133,6 @@ function taxPreset(country: CountryCode, kind: Item<'investments'>['kind']): Pic
   if (kind === 'retirement_account' && profile(country).retirementAccount.taxOnWithdrawal) return { taxTreatment: 'taxed_on_withdrawal', taxRatePct: 20 };
   if (kind === 'kiwisaver' || kind === 'retirement_account') return { taxTreatment: 'returns_after_tax', taxRatePct: 0 };
   return null;
-}
-
-const SECTION_NAMES: Record<string, string> = {
-  investments: 'investment', properties: 'property', otherAssets: 'asset', debts: 'debt', incomes: 'income',
-  dependants: 'dependant', otherExpenses: 'expense', events: 'event', compare: 'comparison',
-};
-const FIELD_NAMES: Record<string, string> = {
-  name: 'Name', label: 'Label', balance: 'Balance', returnPct: 'Return', feesPct: 'Fees', monthlyContribution: 'Monthly contribution',
-  accessAge: 'Can withdraw from age', value: 'Value', growthPct: 'Growth', mortgageBalance: 'Mortgage owing',
-  mortgageRatePct: 'Interest', monthlyRepayment: 'Repayment', monthlyNetRent: 'Net rent', changePct: 'Change',
-  ratePct: 'Rate', monthlyPayment: 'Payment', monthlyAmount: 'Amount', startAge: 'From age', endAge: 'Until age',
-  monthlyCost: 'Cost', years: 'Years', startInYears: 'Starting in', investmentReturnPct: 'Return',
-  currentAge: 'Age', retirementAge: 'Retirement age', cashOnHand: 'Cash', cashInterestPct: 'Cash interest',
-  livingExpensesMonthly: 'Living costs now', retirementLivingExpensesMonthly: 'Living costs in retirement',
-  inflationPct: 'Inflation', surplusReturnPct: 'Return on reinvested surplus', targetNetWorth: 'Target net worth', targetAge: 'Goal age',
-  taxRatePct: 'Tax rate', atAge: 'At your age', amount: 'Amount', replacementValue: 'Replacement home price',
-  sellingCostsPct: 'Selling costs', volatilityPct: 'Market ups and downs',
-};
-/** Percentages that are not yearly rates, with a hint on what to enter. */
-const ONE_OFF_PERCENT_HINTS: Record<string, string> = {
-  sellingCostsPct: 'Enter the share of the sale price paid in agent and legal fees, usually 2 to 5. The sale price itself comes from the property\'s value.',
-  taxRatePct: 'Enter the tax rate as a percentage, for example 20 for 20%.',
-};
-const PERCENT_FIELDS = new Set(['returnPct', 'feesPct', 'growthPct', 'mortgageRatePct', 'changePct', 'ratePct', 'investmentReturnPct', 'cashInterestPct', 'inflationPct', 'surplusReturnPct', 'taxRatePct', 'sellingCostsPct', 'volatilityPct']);
-
-/** Turns a validation problem into a sentence that says where it is and how to fix it. */
-function friendlyError(issue: ZodIssue, plan: Draft): string {
-  const path = issue.path;
-  if (issue.code === 'custom' && path[0] === 'endAge') return '"Plan to your age" needs to be more than your current age.';
-  if (issue.code === 'custom' && path[0] === 'fx') return issue.message;
-  if (path[0] === 'fx' && typeof path[1] === 'number') {
-    const f = plan.fx[path[1]];
-    return `Exchange rate for ${f?.currency ?? 'a currency'}: enter what 1 ${f?.currency ?? 'unit'} is worth in ${COUNTRIES[plan.country].currency}, above 0.`;
-  }
-  const field = String(path[path.length - 1]);
-  const fieldName = FIELD_NAMES[field] ?? field;
-  let where = '';
-  if (typeof path[1] === 'number' && SECTION_NAMES[String(path[0])]) {
-    const item = (plan[path[0] as ListKey] as { name?: string; label?: string }[])[path[1]];
-    const itemName = item?.name || item?.label;
-    where = itemName ? `${itemName} (${SECTION_NAMES[String(path[0])]})` : `A ${SECTION_NAMES[String(path[0])]}`;
-  } else if (path[0] === 'partner') where = "Your partner's details";
-  else if (path[0] === 'you') where = 'Your details';
-  else if (path[0] === 'withdrawal') where = 'Retirement spending';
-  const prefix = where ? `${where}: ` : '';
-  const isPct = PERCENT_FIELDS.has(field);
-  if (issue.code === 'invalid_type') return `${prefix}${fieldName} is empty. Enter a number; 0 is fine.`;
-  if (issue.code === 'too_big') {
-    const hint = ONE_OFF_PERCENT_HINTS[field] ?? (isPct ? 'Enter a yearly percentage, for example 7 for 7%.' : '');
-    return `${prefix}${fieldName} can be at most ${String(issue.maximum)}${isPct ? '%' : ''}. ${hint}`.trim();
-  }
-  if (issue.code === 'too_small') {
-    if (field === 'name' || field === 'label') return `${prefix}give it a name.`;
-    return `${prefix}${fieldName} must be at least ${String(issue.minimum)}${isPct ? '%' : ''}.`;
-  }
-  return `${prefix}check ${fieldName}.`;
 }
 
 /** Fills defaults so every field has a value the form can show. */
@@ -497,7 +441,7 @@ export default function HouseholdPlanner() {
   };
   const { result, error } = useMemo(() => {
     const parsed = HouseholdInputSchema.safeParse({ ...deferred, compare: deferred.compare.length ? deferred.compare : undefined });
-    if (!parsed.success) return { result: null, error: friendlyError(parsed.error.issues[0], deferred) };
+    if (!parsed.success) return { result: null, error: friendlyPlanError(parsed.error.issues[0], deferred) };
     try {
       return { result: projectHousehold(parsed.data), error: null };
     } catch {

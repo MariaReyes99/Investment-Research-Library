@@ -573,3 +573,12 @@ test('portfolio mix: by asset, type, currency, growth/defensive, and yearly fees
   near(mix.growthDefensive.find((s) => s.label.startsWith('Defensive'))!.value, 20_000 + 33_000, 1);
   near(mix.feesPerYear, 240, 0.01);
 });
+
+test('retirement age is a milestone even when it is today (already retired, or PH default of 60)', () => {
+  for (const [country, age, stopAge] of [['PH', 60, undefined], ['NZ', 60, 60], ['NZ', 70, 65], ['UK', 67, undefined]] as const) {
+    const r = projectHousehold(answersToPlan({ who: 'me', age, stopAge, bank: 100_000, savings: [], homes: [], family: [] }, country, null), { monteCarlo: false });
+    const atRet = r.milestones.find((m) => m.age === r.retirementAge);
+    assert.ok(atRet, `${country} age ${age} stop ${stopAge ?? 'blank'}: no "at retirement" milestone`);
+    assert.ok(atRet.expected > 0, `${country}: expected net worth should include the bank balance`);
+  }
+});

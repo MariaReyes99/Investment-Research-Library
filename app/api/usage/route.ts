@@ -6,7 +6,7 @@
  */
 import { getUsage } from '../../../lib/entitlements';
 import { PLANS } from '../../../lib/plans';
-import { clerkEnabled, getViewer } from '../../../lib/viewer';
+import { clerkEnabled, freeTesting, getViewer } from '../../../lib/viewer';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,7 +20,8 @@ export async function GET(req: Request) {
       planLabel: PLANS[viewer.plan].label,
       signedIn: Boolean(viewer.userId),
       canSignIn: clerkEnabled,
-      canUpgrade: clerkEnabled && Boolean(process.env.STRIPE_SECRET_KEY),
+      canUpgrade: !freeTesting && clerkEnabled && Boolean(process.env.STRIPE_SECRET_KEY),
+      freeTesting,
     },
     { headers: { 'Cache-Control': 'no-store' } },
   );
