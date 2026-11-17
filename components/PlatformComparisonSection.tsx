@@ -27,7 +27,7 @@ export default function PlatformComparisonSection({ startOpen = false }: { start
       <div className="platform-explorer-intro">
         <span aria-hidden="true">⚖️</span>
         <div>
-          <h2 id="platform-explorer-title">Retirement fund comparison</h2>
+          <h2 id="platform-explorer-title">Fund comparison</h2>
           <p className="fc-also-known">KiwiSaver · Superannuation · 401(k) and IRA · Workplace and personal pensions · PERA and Pag-IBIG MP2</p>
           <p>
             Staying with your {['Super', 'Pension'].includes(label) ? label.toLowerCase() : label} provider or moving? Compare up to four funds in three simple steps.
@@ -46,7 +46,7 @@ export default function PlatformComparisonSection({ startOpen = false }: { start
         </form>
       )}
       <button type="button" className="wizard-button is-quiet" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        {open ? 'Hide the retirement fund comparison' : 'Open the retirement fund comparison'}
+        {open ? 'Hide the fund comparison' : 'Open the fund comparison'}
       </button>
       {open && (
         <>

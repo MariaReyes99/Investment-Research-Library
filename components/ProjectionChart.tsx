@@ -12,7 +12,7 @@ const moneyNzd = money;
 const compact = (n: number) =>
   new Intl.NumberFormat('en-NZ', { notation: 'compact', maximumFractionDigits: 1 }).format(n);
 
-const COLORS = { line: '#53634f', range: '#c9d3c1', goal: '#c77957', retire: '#737a70', grid: '#e4e7de', tick: '#737a70' };
+const COLORS = { line: '#2f4a78', range: '#c4d0e4', goal: '#0b8679', retire: '#4a6290', grid: '#e3e9f3', tick: '#4a6290' };
 
 /** Low–high band, expected line, retirement marker and goal line, in today's dollars. */
 export function ProjectionChart({ result, height = 280, country }: { result: ProjectionResult; height?: number; country?: CountryCode }) {

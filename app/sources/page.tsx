@@ -3,7 +3,7 @@ import SiteHeader from '../../components/SiteHeader';
 import { sourcesRegister } from '../../lib/sources';
 import { COUNTRIES, isCountry } from '../../lib/countries';
 
-export const metadata: Metadata = { title: 'Sources · Investment Research Library' };
+export const metadata: Metadata = { title: 'Sources · Research Library · DebtFreedomIQ' };
 export const dynamic = 'force-dynamic';
 
 const STATUS = { current: 'Current', 'due-soon': 'Review due soon', overdue: 'Review overdue', undated: 'No date' } as const;

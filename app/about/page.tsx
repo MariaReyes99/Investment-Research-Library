@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import SiteHeader from '../../components/SiteHeader';
 import { DISCLAIMER } from '../../lib/guardrails/advice';
 
-export const metadata: Metadata = { title: 'About & privacy · Investment Research Library' };
+export const metadata: Metadata = { title: 'About & privacy · Research Library · DebtFreedomIQ' };
 
 /*
  * DRAFT wording. Have a New Zealand lawyer review this page (financial advice
@@ -19,8 +19,8 @@ export default function AboutPage() {
 
         <h2>What this is</h2>
         <p>
-          The Investment Research Library answers investing questions using a curated library of guides and documents,
-          and shows the sources behind every answer. The wealth projector illustrates how savings could grow under
+          The DebtFreedomIQ Research Library answers investing questions using a curated library of guides and documents,
+          and shows the sources behind every answer. My retirement picture illustrates how savings could grow under
           assumptions you choose.
         </p>
 
@@ -36,7 +36,7 @@ export default function AboutPage() {
 
         <h2>Your privacy</h2>
         <ul>
-          <li>The wealth projector runs in your browser. The numbers you enter there are not sent to us or stored.</li>
+          <li>My retirement picture runs in your browser. The numbers you enter there are not sent to us or stored.</li>
           <li>
             Questions you ask the library are sent to our AI provider (OpenAI) to generate an answer. Before that, we
             automatically remove details such as email addresses, phone numbers, IRD numbers, bank account numbers and

@@ -1,6 +1,6 @@
 'use client';
 /**
- * Wealth projector. Runs entirely in the browser: the numbers entered here are
+ * Retirement picture. Runs entirely in the browser: the numbers entered here are
  * never sent to the server or stored.
  */
 import { useMemo, useState } from 'react';
@@ -401,12 +401,12 @@ export default function WealthProjector() {
                 <small>{assets.some((asset) => asset.kind === 'property') ? 'Property market value included' : 'Add a Property asset below to include its market value'}</small>
               </div>
               <div className="net-worth-debt-current">
-                <span>Debts today</span>
+                <span>Money you owe</span>
                 <strong>{money(debts.reduce((sum, debt) => sum + debt.currentBalance, 0))}</strong>
                 <small>All entered liabilities</small>
               </div>
               <div className="net-worth-future">
-                <span>Net worth today</span>
+                <span>Your financial position</span>
                 <strong>{money(result.currentNetWorth)}</strong>
                 <small>Assets minus debts</small>
               </div>
@@ -424,7 +424,7 @@ export default function WealthProjector() {
                 <div><span>Living costs</span><strong>−{money(result.monthlyCashflow.livingExpenses)}</strong></div>
                 <div><span>Debt payments</span><strong>−{money(result.monthlyCashflow.debtPayments)}</strong></div>
                 <div><span>Invested</span><strong>−{money(result.monthlyCashflow.investmentContributions)}</strong></div>
-                <div className="cashflow-remaining"><span>{result.monthlyCashflow.remaining < 0 ? 'Monthly shortfall' : 'Unallocated monthly cash'}</span><strong>{money(Math.abs(result.monthlyCashflow.remaining))}</strong></div>
+                <div className="cashflow-remaining"><span>{result.monthlyCashflow.remaining < 0 ? 'Short each month' : 'Unallocated monthly cash'}</span><strong>{money(Math.abs(result.monthlyCashflow.remaining))}</strong></div>
               </section>
             )}
             <ProjectionSummary result={result} />

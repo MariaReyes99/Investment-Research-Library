@@ -1,6 +1,6 @@
 'use client';
 /**
- * Household wealth projector. Runs entirely in the browser: the numbers
+ * Household retirement picture. Runs entirely in the browser: the numbers
  * entered here are never sent to the server. Saved plans stay in this browser.
  */
 import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -876,8 +876,8 @@ export default function HouseholdPlanner() {
       <section id="projection-results" className={`calc-results${error && shown ? ' is-stale' : ''}`} aria-live="polite" aria-label="Projection results">
         <a className="jump-to-form no-print" href="#plan-country">↑ Back to your plan</a>
         <div className="print-only print-header">
-          <h1>Household plan</h1>
-          <p>Printed {new Date().toLocaleDateString()} from the Investment Research Library wealth projector.</p>
+          <h1>My retirement picture</h1>
+          <p>Printed {new Date().toLocaleDateString()} from My retirement picture, DebtFreedomIQ Research Library.</p>
         </div>
         {error && (
           <p className="error-message stale-banner no-print" role="alert">
@@ -889,8 +889,8 @@ export default function HouseholdPlanner() {
           <>
             <BasisLabel country={shown.inputs.country} inflationPct={shown.inputs.inflationPct} retireIn={shown.inputs.retireIn} fx={shown.inputs.fx} />
             <section className="net-worth-panel" aria-label="Net worth summary">
-              <div><span>Net worth today</span><strong>{money(shown.today.netWorth)}</strong><small>Everything owned minus everything owed</small></div>
-              <div><span>Debts today</span><strong>{money(shown.today.debts)}</strong><small>Mortgages and other loans</small></div>
+              <div><span>Your financial position</span><strong>{money(shown.today.netWorth)}</strong><small>Everything owned minus everything owed</small></div>
+              <div><span>Money you owe</span><strong>{money(shown.today.debts)}</strong><small>Mortgages and other loans</small></div>
               <div><span>Cash and investments</span><strong>{money(shown.today.liquid)}</strong><small>What can be spent without selling property</small></div>
               <div>
                 <span>At age {shown.retirementAge}</span>
@@ -909,7 +909,7 @@ export default function HouseholdPlanner() {
                 <ul>{shown.today.outgoings.map((l) => <li key={l.label}><span>{l.label}</span><b>{money(l.amount)}</b></li>)}</ul>
               </div>
               <p>
-                {shown.today.monthlySurplus < 0 ? 'Monthly shortfall' : 'Left over and reinvested'} <strong>{money(Math.abs(shown.today.monthlySurplus))}</strong>
+                {shown.today.monthlySurplus < 0 ? 'Short each month' : 'Left over and reinvested'} <strong>{money(Math.abs(shown.today.monthlySurplus))}</strong>
               </p>
             </section>
 

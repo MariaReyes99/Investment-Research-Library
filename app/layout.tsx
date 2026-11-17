@@ -4,7 +4,7 @@ import './globals.css';
 import IntroAvatar from '../components/IntroAvatar';
 
 export const metadata: Metadata = {
-  title: 'Investment Research Library',
+  title: 'Research Library · DebtFreedomIQ',
   description:
     'Research investing questions against a cited library, and project your future wealth. Education for New Zealand and Australian investors, not financial advice.',
 };

@@ -43,7 +43,7 @@ const SCENES: Scene[] = [
     points: ['Answers with sources', 'Your overall picture', 'Costs and cross-border tax'],
   },
   {
-    icon: '⚖️', title: 'Retirement fund comparison', mood: 'point',
+    icon: '⚖️', title: 'Fund comparison', mood: 'point',
     line: "Compare your KiwiSaver, super or pension in three simple steps: enter your details, choose the funds, then read the results. Hints under each box show where to find your numbers, or just type 'compare the top 3 providers in New Zealand'.",
     points: ['1. Your details', '2. Choose funds', '3. Read the results', 'Hints under every box'],
   },
@@ -92,13 +92,13 @@ const sentences = (text: string) => text.split(/(?<=[.!?])\s+/).filter(Boolean);
 function Penny({ talking, mood, size = 180 }: { talking: boolean; mood?: Scene['mood']; size?: number }) {
   return (
     <svg className={`penny${talking ? ' is-talking' : ''}${mood ? ` is-${mood}` : ''}`} width={size} height={size} viewBox="0 0 200 200" role="img" aria-label="Penny, the presenter">
-      <circle cx="100" cy="100" r="96" fill="#eef3e8" />
+      <circle cx="100" cy="100" r="96" fill="#ecfdfa" />
       {/* body */}
-      <path d="M38 196c4-38 30-58 62-58s58 20 62 58" fill="#53634f" />
-      <path d="M84 140l16 18 16-18" fill="#f3e6dc" />
+      <path d="M38 196c4-38 30-58 62-58s58 20 62 58" fill="#1d3561" />
+      <path d="M84 140l16 18 16-18" fill="#cdf7f0" />
       {/* arm (waves or points) */}
       <g className="penny-arm">
-        <path d="M150 168c10-14 18-30 22-48" stroke="#53634f" strokeWidth="16" strokeLinecap="round" fill="none" />
+        <path d="M150 168c10-14 18-30 22-48" stroke="#1d3561" strokeWidth="16" strokeLinecap="round" fill="none" />
         <circle cx="173" cy="116" r="10" fill="#e9b894" />
       </g>
       {/* neck and head */}

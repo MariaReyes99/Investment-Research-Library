@@ -19,7 +19,7 @@ import {
 import { clearSavedComparison, COMPARISON_STATE_KEY, setComparisonSummary } from '../lib/comparisonShare';
 import { parseFundQuery, pickTopFunds } from '../lib/finance/fundQuery';
 
-const COLORS = ['#087e8b', '#c0472f', '#8a5d00', '#5b63b7'];
+const COLORS = ['#13a796', '#1d3561', '#f59e0b', '#94a7c8'];
 const CUSTOM = '__custom__';
 const compact = (n: number) => new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(n);
 
@@ -32,7 +32,7 @@ const GROUP_LABEL: Record<CalcGroup, string> = {
   'Paid in': 'Paid in', Return: 'Return', Tax: 'Drag: tax', 'Admin fees': 'Drag: admin', 'Other fees': 'Drag: other', Withdrawal: 'Later',
 };
 const GROUP_COLOR: Record<CalcGroup, string> = {
-  'Paid in': '#8b85c9', Return: '#087e8b', Tax: '#d45b43', 'Admin fees': '#b17b12', 'Other fees': '#5b63b7', Withdrawal: '#637275',
+  'Paid in': '#6366f1', Return: '#0b8679', Tax: '#dc2626', 'Admin fees': '#b45309', 'Other fees': '#4a6290', Withdrawal: '#4a6290',
 };
 
 const UNIT: Record<Gran, string> = { monthly: 'month', quarterly: 'quarter', yearly: 'year' };
@@ -245,16 +245,16 @@ function FundPanel({ fund, color, granularity, money, cur }: { fund: FundResult;
           <div className="fund-chart" aria-hidden="true">
             <ResponsiveContainer>
               <ComposedChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-                <CartesianGrid stroke="#e1e8e5" vertical={false} />
-                <XAxis dataKey="period" {...axis} tick={{ fontSize: 10, fill: '#637275' }} />
-                <YAxis tickFormatter={compact} width={50} tick={{ fontSize: 10, fill: '#637275' }} />
+                <CartesianGrid stroke="#e3e9f3" vertical={false} />
+                <XAxis dataKey="period" {...axis} tick={{ fontSize: 10, fill: '#4a6290' }} />
+                <YAxis tickFormatter={compact} width={50} tick={{ fontSize: 10, fill: '#4a6290' }} />
                 <Tooltip formatter={(v, n) => [money(Number(v)), String(n)]} labelFormatter={label} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Area type="monotone" stackId="g" dataKey="startingCapital" name="Starting balance" fill="#c9d6d3" stroke="#9fb3ae" isAnimationActive={false} />
-                <Area type="monotone" stackId="g" dataKey="employee" name="Your contributions" fill="#9ccfc9" stroke="#5aa69c" isAnimationActive={false} />
-                <Area type="monotone" stackId="g" dataKey="employer" name={t.contributionTax > 0 ? 'Employer (before tax)' : 'Employer contributions'} fill="#f0c58f" stroke="#c9934c" isAnimationActive={false} />
-                {hasGov && <Area type="monotone" stackId="g" dataKey="government" name="Government contribution" fill="#c7c3ef" stroke="#8b85c9" isAnimationActive={false} />}
-                <Area type="monotone" stackId="g" dataKey="cumGrowth" name="Return before tax and fees" fill="#7fbfb6" stroke="#087e8b" isAnimationActive={false} />
+                <Area type="monotone" stackId="g" dataKey="startingCapital" name="Starting balance" fill="#c4d0e4" stroke="#94a7c8" isAnimationActive={false} />
+                <Area type="monotone" stackId="g" dataKey="employee" name="Your contributions" fill="#9cede0" stroke="#2dc2b0" isAnimationActive={false} />
+                <Area type="monotone" stackId="g" dataKey="employer" name={t.contributionTax > 0 ? 'Employer (before tax)' : 'Employer contributions'} fill="#fde68a" stroke="#fbbf24" isAnimationActive={false} />
+                {hasGov && <Area type="monotone" stackId="g" dataKey="government" name="Government contribution" fill="#a5b4fc" stroke="#6366f1" isAnimationActive={false} />}
+                <Area type="monotone" stackId="g" dataKey="cumGrowth" name="Return before tax and fees" fill="#5fdac9" stroke="#0b8679" isAnimationActive={false} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -269,14 +269,14 @@ function FundPanel({ fund, color, granularity, money, cur }: { fund: FundResult;
           <div className="fund-chart" aria-hidden="true">
             <ResponsiveContainer>
               <ComposedChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-                <CartesianGrid stroke="#e1e8e5" vertical={false} />
-                <XAxis dataKey="period" {...axis} tick={{ fontSize: 10, fill: '#637275' }} />
-                <YAxis tickFormatter={compact} width={50} tick={{ fontSize: 10, fill: '#637275' }} />
+                <CartesianGrid stroke="#e3e9f3" vertical={false} />
+                <XAxis dataKey="period" {...axis} tick={{ fontSize: 10, fill: '#4a6290' }} />
+                <YAxis tickFormatter={compact} width={50} tick={{ fontSize: 10, fill: '#4a6290' }} />
                 <Tooltip formatter={(v, n) => [money(Number(v)), String(n)]} labelFormatter={label} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Area type="monotone" stackId="d" dataKey="cumTax" name="Tax" fill="#e9a497" stroke="#d45b43" isAnimationActive={false} />
-                <Area type="monotone" stackId="d" dataKey="cumAdmin" name="Admin fees" fill="#e3c78c" stroke="#b17b12" isAnimationActive={false} />
-                <Area type="monotone" stackId="d" dataKey="cumOther" name="Other fees" fill="#aeb2e0" stroke="#5b63b7" isAnimationActive={false} />
+                <Area type="monotone" stackId="d" dataKey="cumTax" name="Tax" fill="#f87171" stroke="#dc2626" isAnimationActive={false} />
+                <Area type="monotone" stackId="d" dataKey="cumAdmin" name="Admin fees" fill="#fde68a" stroke="#b45309" isAnimationActive={false} />
+                <Area type="monotone" stackId="d" dataKey="cumOther" name="Other fees" fill="#c4d0e4" stroke="#4a6290" isAnimationActive={false} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -288,15 +288,15 @@ function FundPanel({ fund, color, granularity, money, cur }: { fund: FundResult;
           <div className="fund-chart" aria-hidden="true">
             <ResponsiveContainer>
               <ComposedChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-                <CartesianGrid stroke="#e1e8e5" vertical={false} />
-                <XAxis dataKey="period" {...axis} tick={{ fontSize: 10, fill: '#637275' }} />
-                <YAxis tickFormatter={compact} width={50} tick={{ fontSize: 10, fill: '#637275' }} />
+                <CartesianGrid stroke="#e3e9f3" vertical={false} />
+                <XAxis dataKey="period" {...axis} tick={{ fontSize: 10, fill: '#4a6290' }} />
+                <YAxis tickFormatter={compact} width={50} tick={{ fontSize: 10, fill: '#4a6290' }} />
                 <Tooltip formatter={(v, n) => [money(Number(v)), String(n)]} labelFormatter={label} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Area type="monotone" stackId="n" dataKey="startingCapital" name="Starting balance" fill="#c9d6d3" stroke="#9fb3ae" isAnimationActive={false} />
-                <Area type="monotone" stackId="n" dataKey="employeeNet" name="Your contributions" fill="#9ccfc9" stroke="#5aa69c" isAnimationActive={false} />
-                <Area type="monotone" stackId="n" dataKey="employerNet" name={t.contributionTax > 0 ? 'Employer (after tax)' : 'Employer contributions'} fill="#f0c58f" stroke="#c9934c" isAnimationActive={false} />
-                {hasGov && <Area type="monotone" stackId="n" dataKey="governmentNet" name="Government contribution" fill="#c7c3ef" stroke="#8b85c9" isAnimationActive={false} />}
+                <Area type="monotone" stackId="n" dataKey="startingCapital" name="Starting balance" fill="#c4d0e4" stroke="#94a7c8" isAnimationActive={false} />
+                <Area type="monotone" stackId="n" dataKey="employeeNet" name="Your contributions" fill="#9cede0" stroke="#2dc2b0" isAnimationActive={false} />
+                <Area type="monotone" stackId="n" dataKey="employerNet" name={t.contributionTax > 0 ? 'Employer (after tax)' : 'Employer contributions'} fill="#fde68a" stroke="#fbbf24" isAnimationActive={false} />
+                {hasGov && <Area type="monotone" stackId="n" dataKey="governmentNet" name="Government contribution" fill="#a5b4fc" stroke="#6366f1" isAnimationActive={false} />}
                 <Area type="monotone" stackId="n" dataKey="cumNetReturn" name="Return after tax and fees" fill={color} fillOpacity={0.35} stroke={color} isAnimationActive={false} />
               </ComposedChart>
             </ResponsiveContainer>
@@ -312,16 +312,16 @@ function FundPanel({ fund, color, granularity, money, cur }: { fund: FundResult;
           <div className="fund-chart" aria-hidden="true">
             <ResponsiveContainer>
               <ComposedChart data={data} margin={{ top: 8, right: 4, bottom: 0, left: 0 }} barGap={0}>
-                <CartesianGrid stroke="#e1e8e5" vertical={false} />
-                <XAxis dataKey="period" {...axis} tick={{ fontSize: 10, fill: '#637275' }} />
-                <YAxis yAxisId="m" tickFormatter={compact} width={50} tick={{ fontSize: 10, fill: '#637275' }} />
-                <YAxis yAxisId="p" orientation="right" tickFormatter={(v) => `${Number(v).toFixed(1)}%`} width={40} tick={{ fontSize: 10, fill: '#637275' }} />
+                <CartesianGrid stroke="#e3e9f3" vertical={false} />
+                <XAxis dataKey="period" {...axis} tick={{ fontSize: 10, fill: '#4a6290' }} />
+                <YAxis yAxisId="m" tickFormatter={compact} width={50} tick={{ fontSize: 10, fill: '#4a6290' }} />
+                <YAxis yAxisId="p" orientation="right" tickFormatter={(v) => `${Number(v).toFixed(1)}%`} width={40} tick={{ fontSize: 10, fill: '#4a6290' }} />
                 <Tooltip formatter={(v, n) => [String(n).includes('%') ? `${Number(v).toFixed(2)}%` : money(Number(v)), String(n)]} labelFormatter={label} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar yAxisId="m" dataKey="growth" name="Before drag" fill="#7fbfb6" isAnimationActive={false} />
+                <Bar yAxisId="m" dataKey="growth" name="Before drag" fill="#5fdac9" isAnimationActive={false} />
                 <Bar yAxisId="m" dataKey="netReturn" name="After drag" fill={color} isAnimationActive={false} />
-                <Line yAxisId="p" type="monotone" dataKey="grossReturnPct" name="Before drag %" stroke="#087e8b" strokeDasharray="4 3" strokeWidth={1.6} dot={false} isAnimationActive={false} />
-                <Line yAxisId="p" type="monotone" dataKey="netReturnPct" name="After drag %" stroke="#26322c" strokeWidth={1.6} dot={false} isAnimationActive={false} />
+                <Line yAxisId="p" type="monotone" dataKey="grossReturnPct" name="Before drag %" stroke="#0b8679" strokeDasharray="4 3" strokeWidth={1.6} dot={false} isAnimationActive={false} />
+                <Line yAxisId="p" type="monotone" dataKey="netReturnPct" name="After drag %" stroke="#12264b" strokeWidth={1.6} dot={false} isAnimationActive={false} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -506,7 +506,7 @@ export default function FundComparison({ initialQuery }: { initialQuery?: { text
     const i = result.inputs;
     const first = result.funds[0];
     const lines = [
-      `${COUNTRIES[country].name} retirement fund comparison (${d.label}) over ${i.years} years: current balance ${money(i.startBalance)}, salary ${money(i.salary)} (+${i.salaryGrowthPct}%/yr), employee ${i.employeePct}%, employer ${i.employerPct}%, extra ${money(i.extraMonthly)}/month, inflation ${i.inflationPct}%${country === 'NZ' ? `, PIR ${i.nzPir}%, government contribution ${i.nzGovContribution ? 'included' : 'not included'}` : ''}${country === 'US' ? `, ${i.usAccount} account` : ''}. Returns used: ${returnSource === 'historic' ? "each fund's published past return, converted to before fees and tax" : 'the same long-term return for each risk level'}; the model assumes a steady return every year (no market falls).`,
+      `${COUNTRIES[country].name} fund comparison (${d.label}) over ${i.years} years: current balance ${money(i.startBalance)}, salary ${money(i.salary)} (+${i.salaryGrowthPct}%/yr), employee ${i.employeePct}%, employer ${i.employerPct}%, extra ${money(i.extraMonthly)}/month, inflation ${i.inflationPct}%${country === 'NZ' ? `, PIR ${i.nzPir}%, government contribution ${i.nzGovContribution ? 'included' : 'not included'}` : ''}${country === 'US' ? `, ${i.usAccount} account` : ''}. Returns used: ${returnSource === 'historic' ? "each fund's published past return, converted to before fees and tax" : 'the same long-term return for each risk level'}; the model assumes a steady return every year (no market falls).`,
       ranked ? 'Funds were picked from a ranking request, so fund 1 may not be the person\'s current fund.' : `Fund 1 (${first.name}) is the person's current fund.`,
       ...result.funds.map((f, k) => {
         const o = options[k];
@@ -536,7 +536,7 @@ export default function FundComparison({ initialQuery }: { initialQuery?: { text
       <header className="comparison-heading">
         <p className="comparison-kicker">{COUNTRIES[country].name} · {d.label} · same person, different funds</p>
         <div className="fc-title-row">
-          <h2 id="fund-comparison-title">Retirement fund comparison: {d.label}</h2>
+          <h2 id="fund-comparison-title">Fund comparison: {d.label}</h2>
           <button type="button" className="fc-reset" onClick={startAgain} disabled={!edited && !query}
             aria-describedby="fc-reset-hint">↺ Start again</button>
           <span id="fc-reset-hint" className="sr-only">Clears this comparison and goes back to the starting values.</span>

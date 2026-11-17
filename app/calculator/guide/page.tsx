@@ -2,16 +2,16 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import SiteHeader from '../../../components/SiteHeader';
 
-export const metadata: Metadata = { title: 'How to fill in the wealth projector · Investment Research Library' };
+export const metadata: Metadata = { title: 'How to fill in My retirement picture · Research Library · DebtFreedomIQ' };
 
-/** Step-by-step guide to the wealth projector, plus what to change at each life stage. */
+/** Step-by-step guide to My retirement picture, plus what to change at each life stage. */
 export default function ProjectorGuidePage() {
   return (
     <div className="page-shell">
       <SiteHeader current="calculator" />
       <main id="main-content" tabIndex={-1} className="page-main prose-page guide-page">
-        <p className="guide-back"><Link href="/?tab=numbers">← Back to My financial numbers</Link></p>
-        <h1 className="page-title">How to fill in the wealth projector</h1>
+        <p className="guide-back"><Link href="/?tab=numbers">← Back to My retirement picture</Link></p>
+        <h1 className="page-title">How to fill in My retirement picture</h1>
         <p className="page-lede">
           Work down the form from top to bottom. You don&apos;t need every section: leave out anything that doesn&apos;t apply,
           and use rough numbers first. The results update as you type, so you can refine as you go.
@@ -99,8 +99,8 @@ export default function ProjectorGuidePage() {
         <h3>10. Goal, comparisons and settings</h3>
         <p>Set a target net worth and the age you want to reach it. Use &quot;Compare return assumptions&quot; to see the same plan at, say, 4%, 6% and 8%. Under &quot;Inflation, reinvested savings and market swings&quot;, the defaults suit most people; raise &quot;Market ups and downs&quot; to 15 or more if most of your money is in shares.</p>
 
-        <h3>11. Retirement fund comparison (KiwiSaver, super, 401(k)/IRA, pensions, PERA)</h3>
-        <p>Open &quot;📊 My financial numbers&quot; and choose <strong>Open the retirement fund comparison</strong>. It works in three steps:</p>
+        <h3>11. Fund comparison (KiwiSaver, super, 401(k)/IRA, pensions, PERA)</h3>
+        <p>Open &quot;📊 My retirement picture&quot; and choose <strong>Open the fund comparison</strong>. It works in three steps:</p>
         <ol>
           <li><strong>Your details:</strong> your current balance, salary before tax, your contribution and your employer&apos;s (as a % of salary), and the years to compare. The hint under each box says where to find the number, for example your latest statement or payslip. &quot;Optional settings&quot; can stay as they are.</li>
           <li><strong>Choose funds:</strong> pick your current fund first, then up to three others, or type a request such as &quot;compare the top 3 providers in NZ&quot;. Fees and past returns fill in from each provider&apos;s latest published figures. Open &quot;Check or change this fund&apos;s fees and return&quot; only if your statement shows different figures.</li>

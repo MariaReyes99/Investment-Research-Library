@@ -60,7 +60,7 @@ function LockedSavedPlans({ signedIn }: { signedIn: boolean }) {
       </ul>
       <p className="asset-editor-note">
         Included in {PLANS.premium.label} (${PLANS.premium.priceNzd} a month) and {PLANS.pro.label}. Cancel at any time.
-        {!signedIn && ' Sign in first if you already have a plan.'}
+        {!signedIn && ' Log in first if you already have a plan.'}
       </p>
       <Link className="plan-button" href="/pricing">See plans</Link>
     </section>
@@ -164,7 +164,7 @@ function SavedPlansTools({ plan, onLoad }: { plan: HouseholdInput; onLoad: (p: H
             <caption>Plans side by side (expected case, today&apos;s money)</caption>
             <thead>
               <tr>
-                <th scope="col">Plan</th><th scope="col">Country</th><th scope="col">Net worth today</th><th scope="col">Monthly surplus</th>
+                <th scope="col">Plan</th><th scope="col">Country</th><th scope="col">Your financial position</th><th scope="col">Monthly surplus</th>
                 <th scope="col">Net worth at retirement</th><th scope="col">Cash and investments at retirement</th>
                 <th scope="col">Money runs out</th><th scope="col">Chance savings last</th><th scope="col">Goal met</th>
               </tr>

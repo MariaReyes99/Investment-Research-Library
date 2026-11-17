@@ -21,7 +21,7 @@ export interface PlanInfo {
 export const PLANS: Record<Plan, PlanInfo> = {
   free: {
     label: 'Free', priceNzd: 0, monthlyQuestions: 5, savedPlans: false,
-    features: ['5 library questions a month', 'Full wealth projector with portfolio analysis', 'Cited answers'],
+    features: ['5 library questions a month', 'Full retirement picture with strengths, weaknesses and risks', 'Cited answers'],
   },
   basic: {
     label: 'Basic', priceNzd: 15, monthlyQuestions: 150, savedPlans: false,

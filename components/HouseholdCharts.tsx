@@ -8,7 +8,7 @@ import type { Finding, HouseholdAnalysis } from '../lib/finance/householdAnalysi
 import { COUNTRIES, moneyFor, type CountryCode } from '../lib/countries';
 
 const compact = (n: number) => new Intl.NumberFormat('en-NZ', { notation: 'compact', maximumFractionDigits: 1 }).format(n);
-const COLORS = { line: '#53634f', range: '#c9d3c1', liquid: '#087e8b', goal: '#c77957', retire: '#737a70', grid: '#e4e7de', tick: '#737a70' };
+const COLORS = { line: '#1d3561', range: '#c4d0e4', liquid: '#13a796', goal: '#f59e0b', retire: '#4a6290', grid: '#e3e9f3', tick: '#4a6290' };
 
 /** Net worth band (Low to High), expected net worth, and cash plus investments. */
 export function HouseholdChart({ result, height = 300 }: { result: HouseholdResult; height?: number }) {
@@ -67,7 +67,7 @@ export function HouseholdHeadline({ result }: { result: HouseholdResult }) {
         {atRet ? (
           <>At {result.retirementAge}, expected net worth is about <strong>{money(atRet.expected)}</strong> in today&apos;s money, including <strong>{money(atRet.liquid)}</strong> in cash and investments.</>
         ) : (
-          <>Net worth today is <strong>{money(result.today.netWorth)}</strong>.</>
+          <>Your financial position is <strong>{money(result.today.netWorth)}</strong>.</>
         )}
       </p>
       {atRet && result.inputs.retireIn && result.inputs.retireIn !== result.inputs.country && (() => {
@@ -183,7 +183,7 @@ export function HouseholdWarnings({ result }: { result: HouseholdResult }) {
 }
 
 
-const MIX_COLORS = ['#53634f', '#c77957', '#4f7fa8', '#b58a1e', '#8a6aa8', '#5f9e8f', '#9a9a8a'];
+const MIX_COLORS = ['#1d3561', '#13a796', '#f59e0b', '#6366f1', '#ef4444', '#94a7c8', '#10b981'];
 
 /** One horizontal bar split into labelled slices. */
 function MixBar({ title, slices, money }: { title: string; slices: HouseholdAnalysis['mix']['byAsset']; money: (n: number) => string }) {
@@ -235,7 +235,7 @@ export function HouseholdAnalysisView({ analysis, country }: { analysis: Househo
   const b = analysis.baseline;
   return (
     <section className="portfolio-analysis" aria-labelledby="analysis-title">
-      <h2 id="analysis-title">Portfolio analysis</h2>
+      <h2 id="analysis-title">Strengths, weaknesses & risks</h2>
       {analysis.mix && <PortfolioMixView mix={analysis.mix} country={country} />}
       <div className="analysis-groups">
         {groups.map(([title, tone, items]) => items.length ? (

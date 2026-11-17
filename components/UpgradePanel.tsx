@@ -33,18 +33,18 @@ export default function UpgradePanel({ tier }: { tier: LimitTier }) {
   if (tier === 'anonymous') {
     return (
       <section className="upgrade-panel" aria-labelledby="upgrade-title">
-        <h2 id="upgrade-title">Sign in to keep asking</h2>
+        <h2 id="upgrade-title">Log in to keep asking</h2>
         <p>
           You&apos;ve used the {ANONYMOUS_MONTHLY_QUESTIONS} questions for visitors this month. A free account gives you{' '}
           {PLANS.free.monthlyQuestions} questions a month. Paid plans give you more.
         </p>
         {clerkEnabled && (
           <SignInButton mode="modal">
-            <button type="button" className="plan-button">Sign in or create a free account</button>
+            <button type="button" className="plan-button">Log in or create a free account</button>
           </SignInButton>
         )}
         <PlanChoices signedIn={false} />
-        <small>The wealth projector stays free and works without an account. <Link href="/?tab=numbers">Open the projector</Link></small>
+        <small>My retirement picture stays free and works without an account. <Link href="/?tab=numbers">Open the projector</Link></small>
       </section>
     );
   }

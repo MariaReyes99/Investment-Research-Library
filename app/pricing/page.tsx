@@ -5,7 +5,7 @@ import { PAID_PLANS, PLANS, planFrom, type Plan } from '../../lib/plans';
 import ManagePlanButton from '../../components/ManagePlanButton';
 import { clerkEnabled } from '../../lib/viewer';
 
-export const metadata: Metadata = { title: 'Plans · Investment Research Library' };
+export const metadata: Metadata = { title: 'Pricing · Research Library · DebtFreedomIQ' };
 
 export default async function PricingPage({ searchParams }: { searchParams: Promise<{ upgraded?: string }> }) {
   const { upgraded } = await searchParams;
@@ -19,7 +19,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
     <div className="page-shell">
       <SiteHeader current="pricing" />
       <main id="main-content" tabIndex={-1} className="page-main">
-        <h1 className="page-title">Plans</h1>
+        <h1 className="page-title">Pricing</h1>
         <p className="page-lede">
           Start free. Upgrade when you want more questions. Prices are in NZD per month including GST. Cancel at any time:
           you keep your plan until the end of the month you&apos;ve paid for, and you won&apos;t be charged again.

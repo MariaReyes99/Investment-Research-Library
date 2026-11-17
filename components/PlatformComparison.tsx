@@ -20,7 +20,7 @@ type OptionDraft = {
   oneOffFee: number;
 };
 
-const COLORS = ['#087e8b', '#d45b43', '#b17b12', '#5b63b7'];
+const COLORS = ['#13a796', '#1d3561', '#f59e0b', '#94a7c8'];
 const START_OPTIONS: OptionDraft[] = [
   { id: 'option-1', name: 'Platform A', expectedReturnPct: 6, annualFeePct: 0.25, monthlyAccountFee: 0, transactionFee: 0, oneOffFee: 0 },
   { id: 'option-2', name: 'Platform B', expectedReturnPct: 6, annualFeePct: 0.75, monthlyAccountFee: 4, transactionFee: 2, oneOffFee: 0 },
@@ -201,10 +201,10 @@ export default function PlatformComparison() {
             <div className="comparison-chart">
               <ResponsiveContainer>
                 <LineChart data={chartData} margin={{ top: 12, right: 118, bottom: 6, left: 4 }}>
-                  <CartesianGrid stroke="#d8e1df" vertical={false} />
-                  <XAxis dataKey="year" tick={{ fill: '#637275', fontSize: 11 }} tickLine={false} />
+                  <CartesianGrid stroke="#c4d0e4" vertical={false} />
+                  <XAxis dataKey="year" tick={{ fill: '#4a6290', fontSize: 11 }} tickLine={false} />
                   <YAxis tickFormatter={(value) => new Intl.NumberFormat('en-NZ', { notation: 'compact', maximumFractionDigits: 1 }).format(Number(value))}
-                    tick={{ fill: '#637275', fontSize: 11 }} width={52} tickLine={false} axisLine={false} />
+                    tick={{ fill: '#4a6290', fontSize: 11 }} width={52} tickLine={false} axisLine={false} />
                   <Tooltip formatter={(value, name) => [money(Number(value)), String(name)]} labelFormatter={(year) => `Year ${year}`} />
                   <Legend verticalAlign="top" height={30} iconType="plainline" wrapperStyle={{ fontSize: 12.5 }} />
                   {result.options.map((option, index) => (

@@ -101,7 +101,7 @@ const ProjectionFromArgs = memo(function ProjectionFromArgs({ args, country: sel
       <MilestoneTable result={data.result} country={country} />
       <HouseholdAnalysisView analysis={data.analysis} country={country} />
       <p className="projection-note">
-        <a href={projectorLink(data.household)} onClick={(e) => { e.preventDefault(); openPlanLink(projectorLink(data.household)); }}>Open these numbers in My financial numbers</a> to add income, property,
+        <a href={projectorLink(data.household)} onClick={(e) => { e.preventDefault(); openPlanLink(projectorLink(data.household)); }}>Open these numbers in My retirement picture</a> to add income, property,
         pensions and more, privately on your device.
       </p>
     </details>
@@ -130,7 +130,7 @@ const HouseholdFromArgs = memo(function HouseholdFromArgs({ args }: { args: unkn
       <HouseholdComparison result={result} />
       <HouseholdAnalysisView analysis={analysis} country={result.inputs.country} />
       <p className="projection-note">
-        <a href={projectorLink(args as HouseholdInput)} onClick={(e) => { e.preventDefault(); openPlanLink(projectorLink(args as HouseholdInput)); }}>Open these numbers in My financial numbers</a> to change them privately on your device.
+        <a href={projectorLink(args as HouseholdInput)} onClick={(e) => { e.preventDefault(); openPlanLink(projectorLink(args as HouseholdInput)); }}>Open these numbers in My retirement picture</a> to change them privately on your device.
       </p>
     </details>
   );
@@ -148,7 +148,7 @@ type UsageInfo = { remaining: number | null; limit: number; tier: LimitTier; lim
 export default function Page() {
   const [country, setCountry] = useCountry();
   const [retireIn, setRetireIn] = useRetireIn();
-  // The plan from the wealth projector, sent only while "Include my plan" is on
+  // The plan from My retirement picture, sent only while "Include my plan" is on
   const projectorPlan = useProjectorPlan(country);
   // On by default: the projector on this page is linked to the library automatically. People can switch it off.
   const [includePlan, setIncludePlanState] = useState(true);
@@ -165,7 +165,7 @@ export default function Page() {
   const [tab, setTab] = useState<Tab>('ask');
   const [numbersOpened, setNumbersOpened] = useState(false);
   const [projectorKey, setProjectorKey] = useState(0);
-  // A projection in a chat answer was opened: show it in "My financial numbers" without leaving the page
+  // A projection in a chat answer was opened: show it in "My retirement picture" without leaving the page
   useEffect(() => {
     const open = () => { setTab('numbers'); setNumbersOpened(true); setProjectorKey((k) => k + 1); window.scrollTo({ top: 0 }); };
     window.addEventListener('irl:open-plan', open);
@@ -187,7 +187,7 @@ export default function Page() {
     openTab(next);
     requestAnimationFrame(() => document.getElementById(next === 'ask' ? 'tab-ask' : 'tab-numbers')?.focus());
   };
-  // Open "My financial numbers" when arriving from an old /calculator link or a "plan" link
+  // Open "My retirement picture" when arriving from an old /calculator link or a "plan" link
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('tab') === 'numbers' || params.get('view') === 'full' || window.location.hash.startsWith('#plan=')) {
@@ -241,11 +241,11 @@ export default function Page() {
   return (
     <main className="guide-shell">
       <aside className="guide-rail" aria-label="Library navigation">
-        <a className="brand-lockup" href="#top" aria-label="Investment Research Library home">
-          <span className="brand-mark" aria-hidden="true">R</span>
+        <a className="brand-lockup" href="#top" aria-label="Research Library · DebtFreedomIQ home">
+          <img className="brand-mark brand-logo" src="/dfiq-icon.png" alt="" aria-hidden="true" />
           <span className="brand-copy">
             <strong>Research Library</strong>
-            <small>NZ, AU, US, UK, PH</small>
+            <small>by DebtFreedomIQ</small>
           </span>
         </a>
 
@@ -266,8 +266,8 @@ export default function Page() {
           <button type="button" className="corpus-entry corpus-button" onClick={() => openTab(tab === 'numbers' ? 'ask' : 'numbers')}>
             <span className="corpus-glyph" aria-hidden="true">$</span>
             <span>
-              <strong>{tab === 'numbers' ? 'Back to the library' : 'My financial numbers'}</strong>
-              <small>{tab === 'numbers' ? 'Ask about your plan' : 'Wealth projector and fund comparison'}</small>
+              <strong>{tab === 'numbers' ? 'Back to the library' : 'My retirement picture'}</strong>
+              <small>{tab === 'numbers' ? 'Ask about your plan' : 'Retirement picture and fund comparison'}</small>
             </span>
             <span className="ready-dot" aria-hidden="true" />
           </button>
@@ -308,26 +308,26 @@ export default function Page() {
           <RetireInSelect id="chat-retire-in-mobile" value={retireIn && retireIn !== country ? retireIn : null} livesIn={country} onChange={setRetireIn} />
         </div>
 
-        <div id="main-content" tabIndex={-1} className="workspace-tabs" role="tablist" aria-label="Library or my financial numbers" onKeyDown={onTabKey}>
+        <div id="main-content" tabIndex={-1} className="workspace-tabs" role="tablist" aria-label="Library or my retirement picture" onKeyDown={onTabKey}>
           <button type="button" role="tab" id="tab-ask" aria-controls="panel-ask" tabIndex={tab === 'ask' ? 0 : -1} aria-selected={tab === 'ask'} className={tab === 'ask' ? 'is-on' : ''} onClick={() => openTab('ask')}>
-            💬 Ask the library {includePlan && (projectorPlan || comparisonSummary) && <small>· linked to my financial numbers</small>}
+            💬 Ask the library {includePlan && (projectorPlan || comparisonSummary) && <small>· linked to my retirement picture</small>}
           </button>
           <button type="button" role="tab" id="tab-numbers" aria-controls="panel-numbers" tabIndex={tab === 'numbers' ? 0 : -1} aria-selected={tab === 'numbers'} className={tab === 'numbers' ? 'is-on' : ''} onClick={() => openTab('numbers')}>
-            📊 My financial numbers <small>· wealth projector and retirement fund comparison</small>
+            📊 My retirement picture <small>· retirement picture and fund comparison</small>
           </button>
         </div>
 
         {numbersOpened && (
           <div className="numbers-panel" id="panel-numbers" role="tabpanel" aria-labelledby="tab-numbers" hidden={tab !== 'numbers'}>
-            <h1 className="page-title">My financial numbers</h1>
+            <h1 className="page-title">My retirement picture</h1>
             <p className="page-lede">
               See where your money could take you, on your own or as a couple. Your answers stay on this device; while
-              &quot;Include my financial numbers&quot; is on, the library uses them to explain what they mean and how you could improve them.
+              &quot;Include my retirement picture&quot; is on, the library uses them to explain what they mean and how you could improve them.
             </p>
             <p className={`link-status${includePlan ? ' is-on' : ''}`} role="status">
               <span>🔗 Linked to the library:</span>
-              <span className={projectorPlan ? 'is-yes' : 'is-no'}>{projectorPlan ? '✓' : '○'} Wealth projector plan{projectorPlan ? '' : ' (not set up yet)'}</span>
-              <span className={comparisonSummary ? 'is-yes' : 'is-no'}>{comparisonSummary ? '✓' : '○'} Retirement fund comparison{comparisonSummary ? '' : ' (not set up yet)'}</span>
+              <span className={projectorPlan ? 'is-yes' : 'is-no'}>{projectorPlan ? '✓' : '○'} Retirement picture{projectorPlan ? '' : ' (not set up yet)'}</span>
+              <span className={comparisonSummary ? 'is-yes' : 'is-no'}>{comparisonSummary ? '✓' : '○'} Fund comparison{comparisonSummary ? '' : ' (not set up yet)'}</span>
               {!includePlan && <button type="button" className="link-button" onClick={() => setIncludePlan(true)}>Turn linking on</button>}
             </p>
             <div className="ask-about-numbers" role="group" aria-labelledby="ask-numbers-label">
@@ -352,7 +352,7 @@ export default function Page() {
         <div className="conversation-column" id="panel-ask" role="tabpanel" aria-labelledby="tab-ask" hidden={tab !== 'ask'}>
           {messages.length === 0 ? (
             <section className="welcome-panel" aria-labelledby="welcome-title">
-              <div className="welcome-seal" aria-hidden="true"><span>RL</span></div>
+              <img className="welcome-logo" src="/dfiq-icon.png" alt="" aria-hidden="true" />
               <p className="eyebrow">A CITED INVESTING LIBRARY</p>
               <h1 id="welcome-title">Ask the <em>library.</em></h1>
               <p className="welcome-copy">
@@ -470,7 +470,7 @@ export default function Page() {
                   <label className="plan-share-toggle">
                     <input type="checkbox" role="switch" checked={includePlan} onChange={(ev) => setIncludePlan(ev.target.checked)} />
                     <span className="plan-share-track" aria-hidden="true"><span /></span>
-                    <span>📎 Include my financial numbers (projector plan{comparisonSummary ? ' and retirement fund comparison' : ''})</span>
+                    <span>📎 Include my retirement picture (projector plan{comparisonSummary ? ' and fund comparison' : ''})</span>
                   </label>
                   <small>
                     {includePlan
@@ -493,7 +493,7 @@ export default function Page() {
                   )}
                 </>
               ) : (
-                <small>Want answers about your own numbers? <button type="button" className="link-button" onClick={() => openTab('numbers')}>Fill in My financial numbers</button> and the library will use them automatically.</small>
+                <small>Want answers about your own numbers? <button type="button" className="link-button" onClick={() => openTab('numbers')}>Fill in My retirement picture</button> and the library will use them automatically.</small>
               )}
             </div>
             {privacyNotice && (

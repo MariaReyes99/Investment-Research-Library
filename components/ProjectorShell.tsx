@@ -1,6 +1,6 @@
 'use client';
 /**
- * The wealth projector page: a guided, step-by-step setup by default, and an
+ * My retirement picture page: a guided, step-by-step setup by default, and an
  * "Advanced" view with every option. Whatever was entered in the guided
  * setup is carried into "Advanced", whichever way the person switches.
  */

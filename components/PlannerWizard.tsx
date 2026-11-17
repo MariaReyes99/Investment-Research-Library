@@ -1,6 +1,6 @@
 'use client';
 /**
- * Guided setup for the wealth projector: one topic per screen, plain words,
+ * Guided setup for My retirement picture: one topic per screen, plain words,
  * a short reason for each question, and no example numbers filled in.
  * Everything stays on this device. At the end it shows the results, and
  * "Open in Advanced" opens the same plan in the Advanced view.

@@ -1,10 +1,10 @@
 'use client';
 /**
- * A short text summary of the retirement fund comparison, so the library chat
- * can answer questions about it together with the wealth projector plan.
+ * A short text summary of the fund comparison, so the library chat
+ * can answer questions about it together with the retirement picture.
  * Kept on this device only (localStorage, like the projector plan), so it is
  * still linked after a reload or when the comparison is closed. It is sent
- * with a question only while "Include my financial numbers" is on, and "Start again" or
+ * with a question only while "Include my retirement picture" is on, and "Start again" or
  * "Clear my data" removes it.
  */
 import { useSyncExternalStore } from 'react';

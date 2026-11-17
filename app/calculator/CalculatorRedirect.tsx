@@ -10,7 +10,7 @@ export default function CalculatorRedirect() {
   }, []);
   return (
     <main id="main-content" tabIndex={-1} className="page-main">
-      <p>The wealth projector is now on the library page. <a href="/?tab=numbers">Open My financial numbers →</a></p>
+      <p>My retirement picture is now on the library page. <a href="/?tab=numbers">Open My retirement picture →</a></p>
     </main>
   );
 }

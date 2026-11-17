@@ -3,7 +3,7 @@ import Link from 'next/link';
 import SiteHeader from '../../components/SiteHeader';
 import { COUNTRIES, COUNTRY_CODES, PROFILES_AS_AT, disclaimerFor } from '../../lib/countries';
 
-export const metadata: Metadata = { title: 'Methodology · Investment Research Library' };
+export const metadata: Metadata = { title: 'How it works · Research Library · DebtFreedomIQ' };
 
 /*
  * DRAFT wording. Have a lawyer in each country you serve review this page and
@@ -16,7 +16,7 @@ export default function MethodologyPage() {
       <main id="main-content" tabIndex={-1} className="page-main prose-page">
         <h1 className="page-title">How the library works</h1>
         <p className="page-lede">
-          What the answers are based on, how the wealth projector calculates, and what it leaves out.
+          What the answers are based on, how My retirement picture calculates, and what it leaves out.
         </p>
 
         <h2>Answers</h2>
@@ -32,7 +32,7 @@ export default function MethodologyPage() {
           personal recommendation get an educational answer that is checked before you see it.
         </p>
 
-        <h2>The wealth projector</h2>
+        <h2>My retirement picture</h2>
         <p>
           The projector works month by month. Each month it adds income (after tax), subtracts living costs, dependants,
           other expenses, loan repayments and investment contributions, then grows every balance by its own return. Money
@@ -47,7 +47,7 @@ export default function MethodologyPage() {
           <li><strong>More than one country:</strong> every investment, property, loan, income, dependant, expense and event can be in its own currency. Each is converted into the currency of the country you live in every month, using exchange rates you can change (filled in from the European Central Bank&apos;s daily reference rates via Frankfurter) and an expected yearly change. Retirement costs can be in the country you plan to retire in. Each pension starts at the age set by the country that pays it. Exchange rates are not randomised in the simulated markets.</li>
           <li><strong>Reverse mortgages:</strong> from a chosen age, you receive a lump sum and/or regular payments borrowed against a property, with no repayments. Interest compounds on the loan, which is repaid when the property is sold or counted against your net worth at the end of the plan. The loan is capped at the property&apos;s value (a no-negative-equity guarantee, which many providers offer). Provider rules on age and how much you can borrow are not modelled; check with providers.</li>
           <li><strong>Retirement spending:</strong> spend a fixed amount (your retirement living costs), a fixed percentage of savings each year, or a flexible &quot;guardrails&quot; rule that cuts spending 10% when withdrawals rise well above where they started and raises it 10% when markets do well.</li>
-          <li><strong>Portfolio analysis:</strong> strengths, weaknesses and risks are worked out from your numbers using rules of thumb (for example, a cash buffer of 3 to 6 months). Each lever re-runs the whole plan with one change so its effect is measured. Levers show trade-offs; they are not recommendations.</li>
+          <li><strong>Strengths, weaknesses & risks:</strong> strengths, weaknesses and risks are worked out from your numbers using rules of thumb (for example, a cash buffer of 3 to 6 months). Each lever re-runs the whole plan with one change so its effect is measured. Levers show trade-offs; they are not recommendations.</li>
         </ul>
 
         <h2>What it leaves out</h2>

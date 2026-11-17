@@ -9,7 +9,7 @@ function ClerkAccountControls() {
   if (!isSignedIn) {
     return (
       <SignInButton mode="modal">
-        <button type="button" className="account-link account-button">Sign in</button>
+        <button type="button" className="account-link account-button">Log in</button>
       </SignInButton>
     );
   }
@@ -22,8 +22,8 @@ const clerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 export default function AccountControls({ showProjector = false }: { showProjector?: boolean }) {
   return (
     <div className="account-controls">
-      {showProjector && <Link className="account-link only-mobile" href="/?tab=numbers">My financial numbers</Link>}
-      <Link className="account-link" href="/pricing">Plans</Link>
+      {showProjector && <Link className="account-link only-mobile" href="/?tab=numbers">My retirement picture</Link>}
+      <Link className="account-link" href="/pricing">Pricing</Link>
       {clerkEnabled && <ClerkAccountControls />}
     </div>
   );
