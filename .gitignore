@@ -21,3 +21,5 @@ node_modules
 *Backup Code*
 .env*
 !.env.example
+
+_from_old/
