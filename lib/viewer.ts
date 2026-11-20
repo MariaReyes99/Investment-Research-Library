@@ -12,6 +12,14 @@ export const clerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KE
 
 export type Viewer = { key: string; userId: string | null; plan: Plan };
 
+/**
+ * Testing mode: set FREE_TESTING=true in Vercel to give every visitor the
+ * Premium features (saved plans, side-by-side comparison, plan files) without
+ * paying, and hide the upgrade prompts. Remove it to switch subscriptions back on.
+ */
+export const freeTesting = process.env.FREE_TESTING === 'true';
+const TESTING_PLAN: Plan = 'premium';
+
 let warnedSalt = false;
 
 /**
@@ -32,7 +40,7 @@ export async function getViewer(req: Request): Promise<Viewer> {
     const { userId } = await auth();
     if (userId) {
       const user = await currentUser();
-      return { key: `u:${userId}`, userId, plan: planFrom(user?.publicMetadata) };
+      return { key: `u:${userId}`, userId, plan: freeTesting ? TESTING_PLAN : planFrom(user?.publicMetadata) };
     }
   }
   const salt = process.env.IP_HASH_SALT;
@@ -41,5 +49,5 @@ export async function getViewer(req: Request): Promise<Viewer> {
     console.warn('IP_HASH_SALT is not set. Set a long random value so visitor IP hashes cannot be reversed.');
   }
   const hash = createHash('sha256').update(`${salt ?? 'irl-dev'}|${clientIp(req)}`).digest('hex').slice(0, 32);
-  return { key: `ip:${hash}`, userId: null, plan: 'free' };
+  return { key: `ip:${hash}`, userId: null, plan: freeTesting ? TESTING_PLAN : 'free' };
 }

@@ -889,8 +889,11 @@ export function projectHousehold(
   const start = mid.series[0];
   const retirementAge = Math.max(h.you.retirementAge, h.you.currentAge);
 
+  // The retirement age is always included, even when it is today (stopping work now or already
+  // retired, e.g. 60 in the Philippines where the SSS pension age is the default): every screen
+  // reads "at retirement" from this list.
   const milestoneAges = [...new Set([retirementAge, 55, 60, 65, 70, 75, 80, 85, 90, h.endAge])]
-    .filter((a) => a > h.you.currentAge && a <= h.endAge)
+    .filter((a) => (a > h.you.currentAge || a === retirementAge) && a <= h.endAge)
     .sort((a, b) => a - b);
   const milestones = milestoneAges.map((age) => ({
     age,

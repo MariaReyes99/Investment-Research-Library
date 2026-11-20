@@ -6,7 +6,8 @@
  * "Open in Advanced" opens the same plan in the Advanced view.
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { CURRENCIES, projectHousehold, usedCurrencies, type Currency, type HouseholdInput } from '../lib/finance/household';
+import { CURRENCIES, HouseholdInputSchema, projectHousehold, usedCurrencies, type Currency, type HouseholdInput } from '../lib/finance/household';
+import { friendlyPlanError, type PlanForErrors } from '../lib/finance/planErrors';
 import { analyseHousehold } from '../lib/finance/householdAnalysis';
 import { openPlanLink, projectorLink } from '../lib/finance/householdLink';
 import { COUNTRIES, COUNTRY_CODES, localTerms, moneyFor, profile, retirementSavingsLabel, type CountryCode } from '../lib/countries';
@@ -777,11 +778,15 @@ export default function PlannerWizard({ onPlanChange }: { onPlanChange?: (plan: 
   const plan = step === last ? livePlan : null;
   const result = useMemo(() => {
     if (!plan) return null;
+    // Say what to fix: a check on the plan names the answer; anything else is reported plainly.
+    const parsed = HouseholdInputSchema.safeParse(plan);
+    if (!parsed.success) return { r: null, analysis: null, problem: friendlyPlanError(parsed.error.issues[0], plan as PlanForErrors) };
     try {
       const r = projectHousehold(plan);
-      return { r, analysis: analyseHousehold(r) };
-    } catch {
-      return null;
+      return { r, analysis: analyseHousehold(r), problem: null };
+    } catch (e) {
+      console.error('Guided results could not be calculated', e);
+      return { r: null, analysis: null, problem: 'Something in your answers couldn\'t be calculated. Go back through the steps and check the last numbers you changed.' };
     }
   }, [plan]);
 
@@ -805,7 +810,7 @@ export default function PlannerWizard({ onPlanChange }: { onPlanChange?: (plan: 
           </div>
         </div>
         {!r || !atRet ? (
-          <p className="wizard-help is-gentle">We couldn&apos;t work this out. Go back and check your ages.</p>
+          <p className="wizard-help is-gentle" role="alert">{result?.problem ?? 'We couldn\u2019t work this out. Go back and check your answers.'}</p>
         ) : (
           <>
             <div className="wizard-highlights">

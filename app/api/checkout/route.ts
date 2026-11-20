@@ -7,7 +7,7 @@
  */
 import Stripe from 'stripe';
 import { z } from 'zod';
-import { clerkEnabled, getViewer } from '../../../lib/viewer';
+import { clerkEnabled, getViewer, freeTesting } from '../../../lib/viewer';
 import { checkCheckoutLimit } from '../../../lib/entitlements';
 import { securityAlert } from '../../../lib/alerts';
 import { assertSameOrigin, readJsonBody } from '../../../lib/security';
@@ -25,6 +25,7 @@ const json = (body: unknown, status = 200) => Response.json(body, { status, head
 export async function POST(req: Request) {
   const crossSite = assertSameOrigin(req);
   if (crossSite) return json({ error: crossSite.message }, crossSite.status);
+  if (freeTesting) return json({ error: 'Everything is free while we test. Paid plans open at launch.' }, 503);
   if (!process.env.STRIPE_SECRET_KEY || !clerkEnabled) {
     return json({ error: 'Paid plans are not open yet.' }, 503);
   }
